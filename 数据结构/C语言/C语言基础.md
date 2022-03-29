@@ -181,7 +181,7 @@ f("Hello World!\n");
 
 ## 7、printf函数用法
 
-参考地址：[http://bbs.fishc.com/thread-66471-1-1.html](https://fishc.com.cn/thread-66471-1-1.html)
+参考地址：http://bbs.fishc.com/thread-66471-1-1.html
 
 ```c
 #include <stdio.h>
@@ -234,3 +234,62 @@ int printf ( const char * format, ... );
 
 ​		注：如果 % 后边的字符不是转换字符，则其行为没有定义。
 
+
+
+# 四、常量
+
+1. C 语言中常见的常量
+
+- 整型常量：520, 1314, 123
+- 实型常量：3.14, 5.12, 8.97
+- 字符常量
+  - 普通字符：'L', 'o', 'v', 'e'
+  - 转义字符：'\n', '\t', '\b'
+- 字符串常量："FishC"
+- 符号常量：使用之前必须先定义
+
+
+
+2. 定义符号常量（宏定义）
+
+   符号常量的定义格式是：
+
+   \#define 标识符 常量
+
+   其中这个 #define 是一条预处理命令（预处理命令都以"#"开头），我们也称为宏定义命令。它的功能就是把程序中所有出现的标识符都替换为随后的常量。
+
+   ```c
+   #include <stdio.h>
+   
+   #define URL "http://www.fishc.com"
+   #define NAME "鱼C工作室"
+   #define BOSS "小甲鱼"
+   #define YEAR 2010
+   #define MONTH 5
+   #define DAY 20
+   
+   int main()
+   {
+           printf("%s成立于%d年%d月%d日\n", NAME, YEAR, MONTH, DAY);
+           printf("%s是%s创立的……\n", NAME, BOSS);
+           printf("%s的域名是%s\n", NAME, URL);
+   
+           return 0;
+   }
+   ```
+
+   上边的大写字母 URL、NAME、BOSS、YEAR、MONTH、DAY 这些都是符号常量.为了将符号常量和普通的变量名区分开，我们习惯使用全部大写字母来命名符号常量，使用小写字母来命名变量。
+
+
+
+3. 标识符
+
+   在 C 语言中，标识符指的就是一切的名字。比如刚刚的符号常量名是标识符，变量名也是一个标识符。以及我们即将学到的函数、数组、自定义类型这些的名字都称之为标识符。
+
+
+
+4. 字符串常量
+
+   C 语言用一个特殊的转义字符来表示字符串的结束位置。这样当操作系统读取到这个转义字符的时候，就知道该字符串到此为止了。
+
+   这个转义字符就是空字符：'\0'
