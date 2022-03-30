@@ -238,7 +238,7 @@ int printf ( const char * format, ... );
 
 # 四、常量
 
-1. C 语言中常见的常量
+## 1、C 语言中常见的常量
 
 - 整型常量：520, 1314, 123
 - 实型常量：3.14, 5.12, 8.97
@@ -250,46 +250,320 @@ int printf ( const char * format, ... );
 
 
 
-2. 定义符号常量（宏定义）
+## 2、定义符号常量（宏定义）
 
-   符号常量的定义格式是：
+符号常量的定义格式是：
 
-   \#define 标识符 常量
+\#define 标识符 常量
 
-   其中这个 #define 是一条预处理命令（预处理命令都以"#"开头），我们也称为宏定义命令。它的功能就是把程序中所有出现的标识符都替换为随后的常量。
+其中这个 #define 是一条预处理命令（预处理命令都以"#"开头），我们也称为宏定义命令。它的功能就是把程序中所有出现的标识符都替换为随后的常量。
 
-   ```c
-   #include <stdio.h>
-   
-   #define URL "http://www.fishc.com"
-   #define NAME "鱼C工作室"
-   #define BOSS "小甲鱼"
-   #define YEAR 2010
-   #define MONTH 5
-   #define DAY 20
-   
-   int main()
-   {
-           printf("%s成立于%d年%d月%d日\n", NAME, YEAR, MONTH, DAY);
-           printf("%s是%s创立的……\n", NAME, BOSS);
-           printf("%s的域名是%s\n", NAME, URL);
-   
-           return 0;
-   }
-   ```
+```c
+#include <stdio.h>
 
-   上边的大写字母 URL、NAME、BOSS、YEAR、MONTH、DAY 这些都是符号常量.为了将符号常量和普通的变量名区分开，我们习惯使用全部大写字母来命名符号常量，使用小写字母来命名变量。
+#define URL "http://www.fishc.com"
+#define NAME "鱼C工作室"
+#define BOSS "小甲鱼"
+#define YEAR 2010
+#define MONTH 5
+#define DAY 20
 
+int main()
+{
+        printf("%s成立于%d年%d月%d日\n", NAME, YEAR, MONTH, DAY);
+        printf("%s是%s创立的……\n", NAME, BOSS);
+        printf("%s的域名是%s\n", NAME, URL);
 
+        return 0;
+}
+```
 
-3. 标识符
-
-   在 C 语言中，标识符指的就是一切的名字。比如刚刚的符号常量名是标识符，变量名也是一个标识符。以及我们即将学到的函数、数组、自定义类型这些的名字都称之为标识符。
+上边的大写字母 URL、NAME、BOSS、YEAR、MONTH、DAY 这些都是符号常量.为了将符号常量和普通的变量名区分开，我们习惯使用全部大写字母来命名符号常量，使用小写字母来命名变量。
 
 
 
-4. 字符串常量
+## 3、标识符
 
-   C 语言用一个特殊的转义字符来表示字符串的结束位置。这样当操作系统读取到这个转义字符的时候，就知道该字符串到此为止了。
+在 C 语言中，标识符指的就是一切的名字。比如刚刚的符号常量名是标识符，变量名也是一个标识符。以及我们即将学到的函数、数组、自定义类型这些的名字都称之为标识符。
 
-   这个转义字符就是空字符：'\0'
+
+
+## 4、字符串常量
+
+C 语言用一个特殊的转义字符来表示字符串的结束位置。这样当操作系统读取到这个转义字符的时候，就知道该字符串到此为止了。
+
+这个转义字符就是空字符：'\0'
+
+
+
+# 五、数据类型
+
+## 1、数据类型
+
+在 C 语言里，所谓的数据类型就是坑的大小。我们说变量就是在内存里边挖一个坑，然后给这个坑命名。那么数据类型指的就是这个坑的尺寸。C 语言允许使用的类型如下：
+
+![image-20220330094812683](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220330094812683.png)
+
+
+
+## 2、short 和 long
+
+我们可以为这些基本数据类型加上一些限定符，比如表示长度的 short 和 long。比如 int 经过限定符修饰之后，可以是 short int，long int，还可以是 long long int（这个是 C99 新增加的）。
+
+![image-20220330095051569](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220330095051569.png)
+
+这里需要说的是，这里 C 语言并没有限制 int 的坑具体要挖多大，short int 或 long int 的坑又要挖多大。标准只是要求：short int <= int <= long int <= long long int。
+
+
+
+## 3、sizeof 运算符
+
+sizeof 用于获得数据类型或表达式的长度，它有三种使用方式：
+
+- sizeof(type_name); //sizeof(类型);
+- sizeof(object); //sizeof(对象);
+- sizeof object; //sizeof 对象;
+
+
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+int main()
+{
+    int i;
+    char j;
+    float k;
+
+    i = 123;
+    j = 'C';
+    k = 3.14;
+
+    printf("size of int is %d\n", sizeof(int)); // 4
+    printf("size of i is %d\n", sizeof(i)); // 4
+    printf("size of char is %d\n", sizeof(char)); // 1
+    printf("size of j is %d\n", sizeof j); // 1
+    printf("size of float is %d\n", sizeof(float)); // 4
+    printf("size of k is %d\n", sizeof(k));// 4
+
+    return 0;
+}
+```
+
+
+
+## 4、signed 和 unsigned
+
+还有一对类型限定符是 signed 和 unsigned，它们用于限定 char 类型和任何整型变量的取值范围。
+
+signed 表示该变量是带符号位的，而 unsigned 表示该变量是不带符号位的。带符号位的变量可以表示负数，而不带符号位的变量只能表示正数，它的存储空间也就相应扩大一倍。默认所有的整型变量都是 signed 的，也就是带符号位的。
+
+
+
+因此加上 signed 和 unsigned 限定符，四种整型就变成了八种：
+
+- [signed] short [int]
+- unsigned short [int]
+- [signed] int
+- unsigned int
+- [signed] long [int]
+- unsigned long [int]
+- [signed] long long [int]
+- unsigned long long [int]
+
+
+
+> 相传国际象棋是古印度舍罕王的宰相达依尔发明的。舍罕王十分喜爱象棋，决定让宰相自己选择何种赏赐。这位聪明的宰相指着 8 * 8 共 64 格的象棋说：“陛下，请您赏给我一些麦子吧。就在棋盘的第 1 格放 1 粒，第 2 格放 2 粒，第三格放 4 粒，以后每一格都比前一格增加一倍，依此放完棋盘 64 格，我就感激不尽了。”。舍罕王听了达依尔这个“小小”的要求，想都没想就满口答应下来。
+>
+> 结果在给达依尔麦子时舍罕惊奇地发现要给的麦子比自己想象的要多得多，于是他进行了计算，结果令他大惊失色。请问，舍罕王要兑现他的许诺共要多少粒麦子赏赐他的宰相？如果每25000粒麦子重1kg，那么舍罕王应该给予达依尔多少公斤麦子？
+
+```c
+#include <stdio.h>
+#include <math.h>
+
+int main()
+{
+    unsigned long long sum = 0;
+    unsigned long long temp;
+    int i;
+    for (i = 0; i < 64; i++) {
+        // pow为C中求次方的函数，需引入math
+        temp = pow(2, i);
+        sum = sum + temp;
+        // sum = sum + (unsigned long long)pow(2, i);
+    }
+
+    unsigned long long int weight = sum / 25000;
+
+    printf("sum为：%llu\n", sum);
+    printf("结果为：%llu\n", weight);
+
+    return 0;
+}
+```
+
+
+
+# 六、取值范围
+
+## 1、比特位和字节
+
+CPU 能读懂的最小单位（只能存放 0 和 1）—— 比特位，bit，b
+
+内存机构的最小寻址单位 —— 字节，Byte，B
+
+关系：1Byte == 8bit
+
+因此，一个字节可以表示最大的数是：11111111
+
+
+
+## 2、二进制、十进制和十六进制
+
+![image-20220330103818291](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220330103818291.png)
+
+规律：
+
+比如 11（2）== 2^2 - 1（10）；111（2）== 2^3 - 1（10）；
+
+​		1111（2）== 2^4 - 1（10）；1111 1111（2）== 2^8 - 1（10）
+
+**如果一个二进制所有位数都是1，转为十进制的话就是2的n次方减1，n为位数**
+
+
+
+## 3、符号位
+
+存放 signed 类型的存储单元中，左边第一位表示符号位。
+
+如果该位为 0，表示该整数是一个正数；如果该位为 1，表示该整数是一个负数。
+
+一个 32 位的整型变量，除去左边第一位符号位，剩下表示值的只有 31 个比特位。
+
+
+
+## 4、补码
+
+计算机是用补码的形式来存放整数的值。
+
+正数的补码是该数的二进制形式。
+
+负数的补码需要通过以下几步获得：
+
+- 先取得该数的绝对值的二进制形式
+- 再将第1步的值按位取反
+- 最后将第2步的值加1
+
+![image-20220330134113350](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220330134113350.png)
+
+
+
+## 5、二进制表示最大值和最小值
+
+![image-20220330134603471](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220330134603471.png)
+
+
+
+## 6、基本数据类型的取值范围
+
+![image-20220330144238295](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220330144238295.png)
+
+![image-20220330144841281](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220330144841281.png)
+
+补码转十进制：-2^7+.....，即后面的正数加上-128，结果就是负的十进制。
+
+
+
+# 七、字符和字符串
+
+## 1、字符类型
+
+字符类型事实上是一个特殊的整数类型，因此它也有取值范围。
+
+signed char 的取值范围是 -128 ~ 127；unsigned char 的取值范围是 0 ~ 255。
+
+C 标准规定普通整数类型默认使用 signed 修饰符，但没有规定 char 的默认修饰符。
+
+因此，使用 signed 或 unsigned 修饰符，是由编译系统自行决定。
+
+
+
+## 2、ASCII表
+
+**存放在字符类型中的变量，都可以被解释为 ASCII 字符表中的对应字符**
+
+标准 ASCII 字符表使用7位二进制数来表示所有的大写和小写字母，数字 0 到 9、标点符号， 以及在美式英语中使用的特殊控制字符。
+
+其中，ASCII 字符表上的数字 0 ~ 31 以及 127（共 33 个）分配给了控制字符，用于控制像打印机等一些外围设备。这些是看不到的。数字 32 ~ 126 分配给了能在键盘上找到的字符，这些是所见即所得的。
+
+
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+int main()
+{
+    char a = 70, b = 105, c = 115, d = 104, e = 67;
+    printf("%c%c%c%c%c\n", a, b ,c, d, e); // FishC
+    // 因为声明的是字符变量，赋值是ASCII表对应的数字
+    // 输出的时候指定%c，就会找ASCII表对应的字符
+    return 0;
+}
+```
+
+
+
+
+
+## 3、字符串
+
+C 语言没有专门为存储字符串设计一个单独的类型，因为没必要。我们之前已经说过，字符串事实上就是一串字符。所以只需要在内存中找一块空间，然后存放一串字符类型的变量即可。
+
+声明字符串的语法：
+
+`char 变量名[数量];`
+
+对其进行赋值，事实上就是对这一块空间里边的每一个字符变量进行赋值。我们通过索引号来获得每个字符变量的空间。
+
+`变量名[索引号] = 字符;`
+
+```c
+char name[6];
+
+name[0] = 'F';
+name[1] = 'i';
+name[2] = 's';
+name[3] = 'h';
+name[4] = 'C',
+name[5] = '\0';
+```
+
+当然，我们可以把声明和定义写在一块，语法是这样的：
+
+```c
+char name[6] = {'F', 'i', 's', 'h', 'C', '\0'};
+```
+
+其实，中括号（[]）里边的数量咱可以不写，编译器会自动帮你计算的。
+
+```c
+char a[] = {'F', 'i', 's', 'h', 'C', '\0'};
+```
+
+事实上可以直接在大括号写上字符串常量，字符串常量用双引号括起来：
+
+```c
+char a[] = {"FishC"};
+```
+
+使用字符串常量有个好处，那就是你不必亲自在末尾添加 '\0'，它会自动帮你加上。
+
+最后，如果使用字符串常量的话，这个大括号也是可以省掉的：
+
+```c
+char a[] = "FishC";
+printf("%s\n", a);
+```
+
