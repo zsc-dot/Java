@@ -227,3 +227,426 @@ C 语言对于逻辑与和逻辑或采用短路求值的方式。
 
 # 四、switch语句
 
+## 1、switch语法
+
+处理多分支结构，可以考虑使用语法更简便的 switch 语句
+
+```c
+…… // 其它语句
+switch (表达式)
+{
+        case 常量表达式 1: 语句或程序块;
+        case 常量表达式 2: 语句或程序块;
+        ……
+        case 常量表达式 n：语句或程序块;
+        default: 语句或程序块;
+}
+…… // 其它语句
+```
+
+- 这里每个 case 后边的常量是匹配 switch 后边表达式的值
+- case 后边必须跟一个常量值，而不能是一个范围
+- 如果所有的 case 均没有匹配的，那么执行 default 的内容
+- default 是可选的，如果没有 default，并且所有的 case 均不匹配，那么 switch 语句不执行任何动作
+
+
+
+## 2、使用break语句跳出
+
+switch 语句中的 case 和 default 事实上都是“标签”，用来标志一个位置而已。当 switch 跳到某个位置之后，就会一直往下执行，所以我们这里还需要配合一个 break 语句，让代码在适当的位置跳出 switch。
+
+```c
+#include <stdio.h>
+
+int main()
+{
+    char ch;
+
+    printf("请输入成绩：");
+    scanf("%c", &ch);
+
+    switch (ch)
+    {
+        case 'A':
+            printf("成绩在90分以上\n");
+            break;
+        case 'B':
+            printf("成绩在80-90分之间\n");
+            break;
+        case 'C':
+            printf("成绩在70-80分之间\n");
+            break;
+        case 'D':
+            printf("成绩在60-70分之间\n");
+            break;
+        default:
+            printf("请输入有效的成绩评级\n");
+            break;
+    }
+
+    return 0;
+}
+```
+
+
+
+## 3、分支结构的嵌套
+
+如果在一个 if 语句中包含另一个 if 语句，我们就称之为 if 语句的嵌套，也叫分支结构的嵌套。
+
+![image-20220331100137961](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220331100137961.png)
+
+```c
+#include <stdio.h>
+#include <math.h>
+
+int main()
+{
+    int a, b;
+
+    printf("请输入两个数：");
+    scanf("%d %d", &a, &b);
+
+    if (a != b) {
+        if (a > b) {
+            printf("%d > %d\n", a, b);
+        }else {
+            printf("%d < %d\n", a, b);
+        }
+    }else {
+        printf("%d = %d", a, b);
+    }
+
+    return 0;
+}
+```
+
+
+
+## 4、悬挂else
+
+```c
+……
+if (x == 0)
+    if (y == 0)
+        error();
+else
+    z = x + y;
+……
+```
+
+C 语言中有这样的规则，else 始终与同一对括号内最近的未匹配的 if 结合
+
+```c
+#include <stdio.h>
+#include <math.h>
+
+int main()
+{
+    char isRain, isFree;
+
+    printf("是否有空？(Y/N)");
+    scanf("%c", &isFree);
+
+    getchar();// 过滤掉回车
+
+    printf("是否下雨？(Y/N)");
+    scanf("%c", &isRain);
+
+    if (isFree == 'Y')
+        if (isRain == 'Y')
+            printf("记得带伞\n");
+        else{
+            printf("没空!T_T\n");
+        }
+    return 0;
+}
+```
+
+但是“没空”是在`isFree!='Y'`的前提下，这样会导致不管`isFree`是不是“Y”，都会执行下面的if语句。
+
+需要修改为：
+
+```c
+#include <stdio.h>
+#include <math.h>
+
+int main()
+{
+    char isRain, isFree;
+
+    printf("是否有空？(Y/N)");
+    scanf("%c", &isFree);
+
+    getchar();// 过滤掉回车
+
+    printf("是否下雨？(Y/N)");
+    scanf("%c", &isRain);
+
+    if (isFree == 'Y'){
+        if (isRain == 'Y')
+        printf("记得带伞\n");
+    }
+    else{
+        printf("没空!T_T\n");
+    }
+    return 0;
+}
+```
+
+
+
+## 5、等于号带来的问题
+
+ C 语言中使用等号（=）作为赋值运算，使用连续两个等号（==）作为比较运算。
+
+一般而言，赋值运算相对于比较运算出现得更频繁，因此字符较少的 = 就被赋予了更常用的含义——赋值操作。
+
+此外，在 C 语言中赋值符号被作为一种操作符对待，因而重复进行赋值操作（如 a = b = c）可以很容易地书写，并且赋值操作还可以被嵌入到更大的表达式中。
+
+```c
+#include <stdio.h>
+#include <math.h>
+
+int main()
+{
+    char hasBF;
+    printf("小花你有男朋友吗？(Y/N)");
+    scanf("%c", &hasBF);
+
+    if (hasBF == 'Y') {
+        printf("祝福你们！\n");
+    }else {
+        printf("那我们在一起吧！\n");
+    }
+    return 0;
+}
+```
+
+
+
+# 五、while和dowhile语句
+
+## 1、循环结构
+
+当我们需要重复执行同一段代码很多次的时候，就可以使用循环结构来解决。
+
+
+
+## 2、while语句
+
+```c
+while (表达式)
+        循环体
+```
+
+while 语句的语法非常简单，只要表达式的值为真，那么就会不断执行循环体里边的语句或程序块。
+
+```c
+#include <stdio.h>
+#include <math.h>
+
+int main()
+{
+    int i = 1, sum = 0;
+    while(i <= 100) {
+        sum += i;
+        i++;
+    }
+    printf("结果是：%d\n", sum);
+    return 0;
+}
+```
+
+```c
+#include <stdio.h>
+#include <math.h>
+
+int main()
+{
+    int count;
+
+    printf("请输入字符：\n");
+
+    // 从标准输入流中获取字符
+    while(getchar() != '\n') {
+        count++;
+    }
+    printf("总共输入了%d个字符\n",  count);
+    return 0;
+}
+```
+
+
+
+## 3、do…while 语句
+
+除了通过 while 语句实现循环，C 语言中还有一个叫 do…while 的语句，也是用于实现循环。
+
+```c
+do
+    循环体
+while (表达式);
+```
+
+while 是先判断表达式，如果表达式结果为真，才执行循环体里边的内容；
+
+do…while 则相反，先执行循环体的内容再判断表达式是否为真。
+
+注意：do…while 语句在 while 后边一定要用分号（;）表示语句结束。
+
+
+
+# 六、for语句和循环嵌套
+
+## 1、入口条件循环和出口条件循环
+
+while循环是在循环前判断条件的，所以叫入口条件循环
+
+do...while循环是在循环后判断条件的，所以叫出口条件循环
+
+
+
+## 2、循环的基本结构
+
+通常一个循环都将涉及到三个动作：
+
+- 初始化计数器
+- 判断循环条件是否满足
+- 更新计数器
+
+
+
+## 3、for语句
+
+对于 while 语句，这些动作是分散在三个不同的地方。那如果能够把它们都集中到一块，那么对于后期无论是调试也好修改也罢，无疑就便捷了许多，所以 for 语句就这么应运而生。
+
+```c
+for (表达式1; 表达式2; 表达式3)
+        循环体
+```
+
+三个表达式用分号隔开，其中：
+
+- 表达式1是循环初始化表达式
+- 表达式2是循环条件表达式
+- 表达式3是循环调整表达式
+
+这样一来，for 语句将初始化计数器、循环条件判断、更新计数器三个动作组织到了在一起，那么以后如果要修改循环的次数，每次递进的跨度，或者循环结束条件，只需要在 for 语句后边的小括号内统一修改即可。
+
+```c
+#include <stdio.h>
+
+// 判断一个数是不是素数
+int main()
+{
+    int i, num;
+    int flag = 1;
+    printf("请输入一个整数：\n");
+    scanf("%d", &num);
+
+    for(i = 2; i< num/2; i++) {
+        if ((num % i) == 0){
+            flag = 0;
+        }
+    }
+
+    if (flag) {
+        printf("%d是一个素数", num);
+    }else {
+        printf("%d不是一个素数", num);
+    }
+
+    return 0;
+}
+```
+
+
+
+## 4、灵活的 for 语句
+
+for 语句的表达式1，表达式2和表达式3都可以按照需要进行省略（但分号不能省）：
+
+- for ( ; 表达式2; 表达式3)
+- for (表达式1; 表达式2; )
+- for (表达式1; ; )
+- for ( ; ; )
+- ……
+
+注意：如果目的不是特别明确，建议不要这么做，因为程序的可读性会因此而降低！
+
+
+
+## 5、在 for 语句的表达式1中定义变量
+
+C99 的新标准：C99 允许在 for 语句的表达式1中定义变量。
+
+```c
+#include <stdio.h>
+
+int main()
+{
+        for (int i=0, int j=10; i < j; i++, j--)
+        {
+                printf("%d\n", i);
+        }
+
+        return 0;
+}
+```
+
+
+
+## 6、嵌套循环
+
+循环结构跟分支结构一样，都可以实现嵌套。
+
+对于嵌套的循环结构，执行顺序是从内到外：先执行内层循环，再执行外层循环。
+
+```c#include <stdio.h>
+// 九九乘法表
+int main()
+{
+    int i, j;
+    for (i = 1; i <= 9; i++) {
+        for(j = 1; j <= i; j++) {
+            printf("%d*%d = %-2d   ", i, j, i*j); // %-2d表示数字宽度为2，向左对齐，不够在后面补空格
+        }
+        printf("\n");
+    }
+
+    return 0;
+}
+```
+
+
+
+# 七、break和continue
+
+## 1、break
+
+在循环体中，如果我们想要让程序在中途跳出循环，那么我们同样可以使用 break 语句来实现。
+
+执行 break 语句，直接跳出循环体。
+
+有一点需要注意的是，对于嵌套循环来说，break 语句只负责跳出所在的那一层循环，要跳出外层循环则需要再布置一个 break 语句才行。
+
+
+
+## 2、continue
+
+当满足某个条件的时候，跳过本轮循环的内容，直接开始下一轮循环。这时候我们应该使用 continue 语句。
+
+当执行到 continue 语句的时候，循环体的剩余部分将被忽略，直接进入下一轮循环。
+
+对于嵌套循环来说，continue 语句跟 break 语句是一样的：它们都只能作用于一层循环体。
+
+
+
+## 3、for 语句和 while 语句执行过程的区别
+
+for 语句和 while 语句执行过程是有区别的，它们的区别在于出现 continue 语句时。
+
+在 for 语句中，continue 语句跳过循环的剩余部分，直接回到调整部分。
+
+在 while 语句中，调整部分是循环体的一部分，因此 continue 语句会把它也跳过。
