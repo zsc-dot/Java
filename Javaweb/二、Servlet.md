@@ -1,8 +1,8 @@
-# 六、Servlet
+# 一、Servlet
 
 Servlet接口在Sun公司有两个默认的实现类：HttpServlet和GenericServlet
 
-## 6.1、Servlet简介
+## 1.1、Servlet简介
 
 - Servlet是sun公司开发动态web的一门技术
 - Sun公司在这些API中提供一个接口，叫做Servlet。如果想开发一个Servlet程序，只需要完成两个步骤：
@@ -13,7 +13,7 @@ Servlet接口在Sun公司有两个默认的实现类：HttpServlet和GenericServ
 
 
 
-## 6.2、Hello Servlet
+## 1.2、Hello Servlet
 
 1. 构建一个普通的Maven项目，删掉里面的`src`目录，以后的项目都在这个里面建立`Moudel`，这个空的工程就是Maven主工程
 
@@ -111,7 +111,7 @@ Servlet接口在Sun公司有两个默认的实现类：HttpServlet和GenericServ
 
 
 
-## 6.3、Servlet原理
+## 1.3、Servlet原理
 
 Servlet是由Web服务器调用，Web服务器在收到浏览器请求后，会：
 
@@ -119,7 +119,7 @@ Servlet是由Web服务器调用，Web服务器在收到浏览器请求后，会�
 
 
 
-## 6.4、Mapping
+## 1.4、Mapping
 
 1. 一个Servlet可以指定一个映射路径
 
@@ -229,7 +229,7 @@ Servlet是由Web服务器调用，Web服务器在收到浏览器请求后，会�
 
 
 
-## 6.5、ServletContext
+## 1.5、ServletContext
 
 web容器在启动的时候，它会为每个web程序都创建一个对应的ServletContext对象，它代表了当前的web应用。
 
@@ -401,4 +401,207 @@ protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws Se
 
 1. 第一个`/`代表打包后的`servlet-02-1.0-SNAPSHOT`，代表当前web程序根目录
 2. ``/WEB-INF/classes`是打包后的class文件和配置文件的文件夹
+
+
+
+## 1.6、HttpServletResponse
+
+web服务器接收到客户端的http请求，针对这个请求，分别创建一个代表请求的HttpServletRequest对象，代表响应的HttpServletResponse对象。
+
+- 如果要获取客户端请求过来的参数：找HttpServletRequest
+- 如果要给客户端响应一些信息：找HttpServletResponse
+
+### 1、简单分类
+
+HttpServletResponse接口中的方法分类
+
+负责向浏览器发送数据的方法
+
+```java
+ServletOutputStream getOutputStream() throws IOException;
+PrintWriter getWriter() throws IOException;
+```
+
+负责向浏览器发送响应头的方法
+
+```java
+void setCharacterEncoding(String var1);
+void setContentLength(int var1);
+void setContentLengthLong(long var1);
+void setContentType(String var1);
+void setDateHeader(String var1, long var2);
+void addDateHeader(String var1, long var2);
+void setHeader(String var1, String var2);
+void addHeader(String var1, String var2);
+void setIntHeader(String var1, int var2);
+void addIntHeader(String var1, int var2);
+```
+
+响应的状态码常量(此处不再列举)
+
+### 2、下载文件
+
+1. 向浏览器输出消息
+
+2. 下载文件
+
+   1. 要获取下载文件的路径
+   2. 下载的文件名是什么
+   3. 想办法设置让浏览器能够支持下载我们需要的东西
+   4. 获取下载文件的输入流
+   5. 创建缓冲区
+   6. 获取OutputStream对象
+   7. 将FileOutputStream流写入到buffer缓冲区
+   8. 使用OutputStream将缓冲区中的数据输出到客户端
+
+   ```java
+       @Override
+       protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+           // 1. 要获取下载文件的路径
+           String realPath = "D:\\study-code\\javaweb\\javaweb-02-servlet\\response\\src\\main\\resources\\1.jpg";
+           System.out.println("下载文件的路径：" + realPath);
+           // 2. 下载的文件名是什么
+           String fileName = realPath.substring(realPath.lastIndexOf("\\") + 1);
+           // 3. 想办法设置让浏览器能够支持下载我们需要的东西   中文文件名用URLEncoder.encode编码，否则文件名可能乱码
+           resp.setHeader("Content-Disposition", "attachment;filename=" + URLEncoder.encode(fileName, "utf-8"));
+           // 4. 获取下载文件的输入流
+           FileInputStream fis = new FileInputStream(realPath);
+           // 5. 创建缓冲区
+           int len = 0;
+           byte[] buffer = new byte[1024];
+           // 6. 获取OutputStream对象
+           ServletOutputStream os = resp.getOutputStream();
+           // 7. 将FileOutputStream流写入到buffer缓冲区
+           while ((len = fis.read(buffer)) != -1) {
+               // 8. 使用OutputStream将缓冲区中的数据输出到客户端
+               os.write(buffer, 0 ,len);
+           }
+           fis.close();
+           os.close();
+       }
+   ```
+
+### 3、验证码功能
+
+验证怎么来的
+
+- 前端实现
+- 后端实现，需要用到java的图片类，生成一个图片
+
+```java
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        // 如何让浏览器五秒自动刷新一次
+        resp.setHeader("refresh", "3");
+        // 在内存中创建一个图片
+        BufferedImage image = new BufferedImage(80, 20, BufferedImage.TYPE_INT_RGB);
+        // 得到图片
+        Graphics2D g = (Graphics2D) image.getGraphics(); // 画笔
+        // 设置图片的背景颜色
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, 80, 20);
+        // 给图片写数据
+        g.setColor(Color.BLUE);
+        g.setFont(new Font(null, Font.BOLD, 20));
+        g.drawString(makeNum(), 0, 20);
+        // 告诉浏览器这个请求用图片的方式打开
+        resp.setContentType("image/png");
+        // 网站存在缓存，不让浏览器缓存
+        resp.setDateHeader("expirse", -1);
+        resp.setHeader("Cache-Control", "no-cache");
+        resp.setHeader("Pragma", "no-cache");
+        // 把图片写给浏览器
+        boolean write = ImageIO.write(image, "png", resp.getOutputStream());
+    }
+
+    // 生成随机数
+    private String makeNum() {
+        Random random = new Random();
+        String num = random.nextInt(9999999) + "";
+        StringBuffer sb = new StringBuffer();
+        for (int i = 0; i < 7 - num.length(); i++) {
+            sb.append("0");
+        }
+        return sb.toString() + num;
+    }
+```
+
+### 4、重定向
+
+![image-20220712210846441](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220712210846441.png)
+
+一个web资源收到客户端请求后，它会通知客户端去访问另外一个web资源，这个过程就叫重定向。
+
+常见场景：
+
+- 用户登录
+
+  ```java
+  void sendRedirect(String var1) throws IOException;
+  ```
+
+  测试：
+
+  ```java
+      @Override
+      protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+          /**
+           * 根据 F12 查看重定向的底层原理
+           * resp.setHeader("Location", "/r/img");
+           * resp.setStatus(302);
+           */
+          resp.sendRedirect("/r/img");
+      }
+  ```
+
+  面试题：重定向和转发的区别？
+
+  相同点：页面都会跳转
+
+  不同点：请求转发的时候，url不会产生变化；重定向的时候，url地址栏会发生变化。
+
+### 5、使用重定向实现登录
+
+```java
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        // 处理请求
+        String username = req.getParameter("username");
+        String password = req.getParameter("password");
+        System.out.println(username + "：" + password);
+        // 重定向的时候一定要注意路径问题，否则就会404
+        resp.sendRedirect("/r/success.jsp");
+    }
+```
+
+
+
+## 1.7、HttpServletRequest
+
+HttpServletRequest代表客户端的请求，用户通过Http协议访问服务器，Http请求中的所有信息会被封装到HttpServletRequest，通过这个HttpServletRequest的方法，获得客户端的所有信息。
+
+### 1、获取前端传递的参数
+
+![image-20220712214637653](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220712214637653.png)
+
+### 2、请求转发
+
+```java
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        req.setCharacterEncoding("UTF-8");
+        resp.setCharacterEncoding("UTF-8");
+        String username = req.getParameter("username");
+        String password = req.getParameter("password");
+        String[] hobbys = req.getParameterValues("hobbys");
+        System.out.println("=========================================");
+        // 后台接收中文乱码问题
+        System.out.println(username);
+        System.out.println(password);
+        System.out.println(Arrays.toString(hobbys));
+        System.out.println("=========================================");
+        // 这里的 / 代表当前的web应用
+        req.getRequestDispatcher("/success.jsp").forward(req, resp);
+    }
+```
 
