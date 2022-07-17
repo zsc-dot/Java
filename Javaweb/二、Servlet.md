@@ -244,7 +244,6 @@ web容器在启动的时候，它会为每个web程序都创建一个对应的Se
 	放置数据的类
  */
 public class HelloServlet extends HttpServlet {
-
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
 
@@ -255,13 +254,6 @@ public class HelloServlet extends HttpServlet {
 
         String username = "用户"; // 数据
         context.setAttribute("username", username); // 将一个数据保存在了ServletContext中，名字为username，值为username
-
-
-    }
-
-    @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        doGet(req, resp);
     }
 }
 ```
@@ -271,7 +263,6 @@ public class HelloServlet extends HttpServlet {
 	读取数据的类
  */
 public class GetServlet extends HttpServlet {
-
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         ServletContext context = this.getServletContext();
@@ -280,11 +271,6 @@ public class GetServlet extends HttpServlet {
         resp.setContentType("text/html");
         resp.setCharacterEncoding("utf-8");
         resp.getWriter().print("名字" + username);
-    }
-
-    @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        doGet(req, resp);
     }
 }
 ```
@@ -455,30 +441,29 @@ void addIntHeader(String var1, int var2);
    8. 使用OutputStream将缓冲区中的数据输出到客户端
 
    ```java
-       @Override
-       protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-           // 1. 要获取下载文件的路径
-           String realPath = "D:\\study-code\\javaweb\\javaweb-02-servlet\\response\\src\\main\\resources\\1.jpg";
-           System.out.println("下载文件的路径：" + realPath);
-           // 2. 下载的文件名是什么
-           String fileName = realPath.substring(realPath.lastIndexOf("\\") + 1);
-           // 3. 想办法设置让浏览器能够支持下载我们需要的东西   中文文件名用URLEncoder.encode编码，否则文件名可能乱码
-           resp.setHeader("Content-Disposition", "attachment;filename=" + URLEncoder.encode(fileName, "utf-8"));
-           // 4. 获取下载文件的输入流
-           FileInputStream fis = new FileInputStream(realPath);
-           // 5. 创建缓冲区
-           int len = 0;
-           byte[] buffer = new byte[1024];
-           // 6. 获取OutputStream对象
-           ServletOutputStream os = resp.getOutputStream();
-           // 7. 将FileOutputStream流写入到buffer缓冲区
-           while ((len = fis.read(buffer)) != -1) {
-               // 8. 使用OutputStream将缓冲区中的数据输出到客户端
-               os.write(buffer, 0 ,len);
-           }
-           fis.close();
-           os.close();
+   protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+       // 1. 要获取下载文件的路径
+       String realPath = "D:\\study-code\\javaweb\\javaweb-02-servlet\\response\\src\\main\\resources\\1.jpg";
+       System.out.println("下载文件的路径：" + realPath);
+       // 2. 下载的文件名是什么
+       String fileName = realPath.substring(realPath.lastIndexOf("\\") + 1);
+       // 3. 想办法设置让浏览器能够支持下载我们需要的东西   中文文件名用URLEncoder.encode编码，否则文件名可能乱码
+       resp.setHeader("Content-Disposition", "attachment;filename=" + URLEncoder.encode(fileName, "utf-8"));
+       // 4. 获取下载文件的输入流
+       FileInputStream fis = new FileInputStream(realPath);
+       // 5. 创建缓冲区
+       int len = 0;
+       byte[] buffer = new byte[1024];
+       // 6. 获取OutputStream对象
+       ServletOutputStream os = resp.getOutputStream();
+       // 7. 将FileOutputStream流写入到buffer缓冲区
+       while ((len = fis.read(buffer)) != -1) {
+           // 8. 使用OutputStream将缓冲区中的数据输出到客户端
+           os.write(buffer, 0 ,len);
        }
+       fis.close();
+       os.close();
+   }
    ```
 
 ### 3、验证码功能
@@ -489,41 +474,40 @@ void addIntHeader(String var1, int var2);
 - 后端实现，需要用到java的图片类，生成一个图片
 
 ```java
-    @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        // 如何让浏览器五秒自动刷新一次
-        resp.setHeader("refresh", "3");
-        // 在内存中创建一个图片
-        BufferedImage image = new BufferedImage(80, 20, BufferedImage.TYPE_INT_RGB);
-        // 得到图片
-        Graphics2D g = (Graphics2D) image.getGraphics(); // 画笔
-        // 设置图片的背景颜色
-        g.setColor(Color.WHITE);
-        g.fillRect(0, 0, 80, 20);
-        // 给图片写数据
-        g.setColor(Color.BLUE);
-        g.setFont(new Font(null, Font.BOLD, 20));
-        g.drawString(makeNum(), 0, 20);
-        // 告诉浏览器这个请求用图片的方式打开
-        resp.setContentType("image/png");
-        // 网站存在缓存，不让浏览器缓存
-        resp.setDateHeader("expirse", -1);
-        resp.setHeader("Cache-Control", "no-cache");
-        resp.setHeader("Pragma", "no-cache");
-        // 把图片写给浏览器
-        boolean write = ImageIO.write(image, "png", resp.getOutputStream());
-    }
+protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    // 如何让浏览器五秒自动刷新一次
+    resp.setHeader("refresh", "3");
+    // 在内存中创建一个图片
+    BufferedImage image = new BufferedImage(80, 20, BufferedImage.TYPE_INT_RGB);
+    // 得到图片
+    Graphics2D g = (Graphics2D) image.getGraphics(); // 画笔
+    // 设置图片的背景颜色
+    g.setColor(Color.WHITE);
+    g.fillRect(0, 0, 80, 20);
+    // 给图片写数据
+    g.setColor(Color.BLUE);
+    g.setFont(new Font(null, Font.BOLD, 20));
+    g.drawString(makeNum(), 0, 20);
+    // 告诉浏览器这个请求用图片的方式打开
+    resp.setContentType("image/png");
+    // 网站存在缓存，不让浏览器缓存
+    resp.setDateHeader("expirse", -1);
+    resp.setHeader("Cache-Control", "no-cache");
+    resp.setHeader("Pragma", "no-cache");
+    // 把图片写给浏览器
+    boolean write = ImageIO.write(image, "png", resp.getOutputStream());
+}
 
-    // 生成随机数
-    private String makeNum() {
-        Random random = new Random();
-        String num = random.nextInt(9999999) + "";
-        StringBuffer sb = new StringBuffer();
-        for (int i = 0; i < 7 - num.length(); i++) {
-            sb.append("0");
-        }
-        return sb.toString() + num;
+// 生成随机数
+private String makeNum() {
+    Random random = new Random();
+    String num = random.nextInt(9999999) + "";
+    StringBuffer sb = new StringBuffer();
+    for (int i = 0; i < 7 - num.length(); i++) {
+        sb.append("0");
     }
+    return sb.toString() + num;
+}
 ```
 
 ### 4、重定向
@@ -543,35 +527,33 @@ void addIntHeader(String var1, int var2);
   测试：
 
   ```java
-      @Override
-      protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-          /**
-           * 根据 F12 查看重定向的底层原理
-           * resp.setHeader("Location", "/r/img");
-           * resp.setStatus(302);
-           */
-          resp.sendRedirect("/r/img");
-      }
+  protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+      /**
+       * 根据 F12 查看重定向的底层原理
+       * resp.setHeader("Location", "/r/img");
+       * resp.setStatus(302);
+       */
+      resp.sendRedirect("/r/img");
+  }
   ```
-
-  面试题：重定向和转发的区别？
-
-  相同点：页面都会跳转
-
-  不同点：请求转发的时候，url不会产生变化；重定向的时候，url地址栏会发生变化。
+  
+面试题：重定向和转发的区别？
+  
+相同点：页面都会跳转
+  
+不同点：请求转发的时候，url不会产生变化；重定向的时候，url地址栏会发生变化。
 
 ### 5、使用重定向实现登录
 
 ```java
-    @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        // 处理请求
-        String username = req.getParameter("username");
-        String password = req.getParameter("password");
-        System.out.println(username + "：" + password);
-        // 重定向的时候一定要注意路径问题，否则就会404
-        resp.sendRedirect("/r/success.jsp");
-    }
+protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    // 处理请求
+    String username = req.getParameter("username");
+    String password = req.getParameter("password");
+    System.out.println(username + "：" + password);
+    // 重定向的时候一定要注意路径问题，否则就会404
+    resp.sendRedirect("/r/success.jsp");
+}
 ```
 
 
@@ -587,21 +569,202 @@ HttpServletRequest代表客户端的请求，用户通过Http协议访问服务�
 ### 2、请求转发
 
 ```java
-    @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        req.setCharacterEncoding("UTF-8");
-        resp.setCharacterEncoding("UTF-8");
-        String username = req.getParameter("username");
-        String password = req.getParameter("password");
-        String[] hobbys = req.getParameterValues("hobbys");
-        System.out.println("=========================================");
-        // 后台接收中文乱码问题
-        System.out.println(username);
-        System.out.println(password);
-        System.out.println(Arrays.toString(hobbys));
-        System.out.println("=========================================");
-        // 这里的 / 代表当前的web应用
-        req.getRequestDispatcher("/success.jsp").forward(req, resp);
-    }
+protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    req.setCharacterEncoding("UTF-8");
+    resp.setCharacterEncoding("UTF-8");
+    String username = req.getParameter("username");
+    String password = req.getParameter("password");
+    String[] hobbys = req.getParameterValues("hobbys");
+    System.out.println("=========================================");
+    // 后台接收中文乱码问题
+    System.out.println(username);
+    System.out.println(password);
+    System.out.println(Arrays.toString(hobbys));
+    System.out.println("=========================================");
+    // 这里的 / 代表当前的web应用
+    req.getRequestDispatcher("/success.jsp").forward(req, resp);
+}
 ```
+
+
+
+# 二、Cookie、Session
+
+## 2.1、会话
+
+会话：用户打开一个浏览器，点击了很多超链接，访问多个web资源，关闭浏览器，这个过程可以称之为会话。
+
+有状态会话：一个同学来过教室，下次再来教室，我们会知道这个同学曾经来过，称为有状态会话。
+
+**一个网站，怎么证明用户来过？**
+
+客户端    服务端
+
+1. 服务端给客户端一个信件，客户端下次访问服务端带上信件就可以了；cookie
+2. 服务器登记用户来过了，下次用户来的时候服务器来匹配用户；session
+
+
+
+## 2.2、保存会话的两种技术
+
+cookie：客户端技术(响应、请求)
+
+session：服务器技术，利用这个技术，可以保存用户的会话信息。可以把信息或数据放在session中
+
+常见应用：网站登录后，下次就不需要再登陆了，第二次访问直接就上去了
+
+
+
+## 2.3、Cookie
+
+1. 从请求中拿到cookie信息
+2. 服务器响应给客户端cookie
+
+```java
+protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    // 保存用户的上一次请求时间
+    // 服务器告诉客户端来的时间，把这个时间封装成为一个信件，下次请求时客户端带着信件，服务器就知道是用户来了
+    // 解决中文乱码
+    req.setCharacterEncoding("utf-8");
+    resp.setCharacterEncoding("gbk");
+    PrintWriter out = resp.getWriter();
+    // Cookie，服务器端从客户端获取
+    Cookie[] cookies = req.getCookies(); // 这里返回的数组，说明cookie可能存在多个
+    // 判断cookie是否存在
+    if (cookies != null) {
+        // 如果存在
+        out.write("你上一次访问的时间是：");
+        for (int i = 0; i < cookies.length; i++) {
+            Cookie cookie = cookies[i];
+            // 获取cookie的名字
+            if (cookie.getName().equals("lastLoginTime")) {
+                // 获取cookie的值
+                long lastLoginTime = Long.parseLong(cookie.getValue());
+                Date date = new Date(lastLoginTime);
+                out.write(date.toLocaleString());
+            }
+        }
+    }else {
+        out.write("这是您第一访问本站");
+    }
+    // 服务器给客户端响应一个cookie
+    Cookie cookie = new Cookie("lastLoginTime", System.currentTimeMillis() + "");
+    // 设置cookie过期时间
+    cookie.setMaxAge(24*60*60);
+    resp.addCookie(cookie);
+}
+```
+
+服务器响应cookie后，在响应头中可以看到Set-Cookie，再次请求会在请求头中看到Cookie。重启浏览器后，Cookie消失。
+
+如果设置了Cookie的过期时间，重启浏览器后，Cookie也存在。
+
+![image-20220713214513400](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220713214513400.png)
+
+
+
+**cookie：一般会保存在本地 C盘的用户目录下 appdata 中**
+
+**一个网站cookie是否存在上限？**
+
+- 一个cookie只能保存一个信息
+- 一个web站点可以给浏览器发送多个cookie，最多存放20个cookie
+- cookie大小有限制，4KB
+- 浏览器的上限是300个cookie
+
+
+
+**删除cookie：**
+
+- 不设置有效期，关闭浏览器，自动失效
+- 设置有效期时间为0
+
+
+
+**编码解码：**
+
+```java
+URLEncoder.encode("测试用例", "utf-8")
+URLDecoder.decode(cookie.getValue(), "utf-8")
+```
+
+![image-20220717175658670](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220717175658670.png)
+
+
+
+## 2.4、Session
+
+什么是Session？
+
+- 服务器会给每一个用户(浏览器)创建一个Session对象
+- 一个Session独占一个浏览器，只要浏览器没关，这个Session就一直在
+- 用户登录后，整个网站它都可以访问。--->保存用户的信息；保存购物车的信息
+
+
+
+Session和Cookie的区别：
+
+- Cookie是把用户的数据写给用户的浏览器，浏览器保存(可以保存多个)
+- Session把用户的数据写到用户独占的Session中，服务器端保存(保存重要的信息，减少服务器资源的浪费)
+- Session对象由服务器创建
+- Session只能保存单个用户的信息，ServletContext可以保存全局的，所有用户都可以访问。
+
+
+
+使用场景：
+
+- 保存一个登录用户的信息
+- 购物车信息
+- 在整个网站中经常会使用的数据，都保存在Session中
+
+
+
+Session的使用：
+
+```java
+// 存入数据
+protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    // 解决乱码问题
+    req.setCharacterEncoding("utf-8");
+    resp.setCharacterEncoding("utf-8");
+    resp.setContentType("text/html;charset=utf-8");
+    // 得到Session
+    HttpSession session = req.getSession();
+    // 给Session中存东西
+    session.setAttribute("name", "测试");
+    session.setAttribute("person", new Person("测试", 25));
+    // 获取Session的id
+    String id = session.getId();
+    // 判断Session是不是新创建的
+    if (session.isNew()) {
+        resp.getWriter().write("session 创建成功，id为：" + id);
+    }else {
+        resp.getWriter().write("session 已经在服务器中存在了，id为：" + id);
+    }
+    // Session创建时做了什么事情
+    // Cookie cookie = new Cookie("JESESSION", id);
+    // resp.addCookie(cookie);
+}
+// 取出数据
+protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    // 解决乱码问题
+    req.setCharacterEncoding("utf-8");
+    resp.setCharacterEncoding("utf-8");
+    resp.setContentType("text/html;charset=utf-8");
+    // 得到Session
+    HttpSession session = req.getSession();
+    Object name = session.getAttribute("name");
+    System.out.println((String) name);
+    Object person = session.getAttribute("person");
+    System.out.println(person.toString());
+    // 移除数据
+    session.removeAttribute("name");
+    // 手动注销Session，一旦注销，就会立即自动生成一个新的
+    session.invalidate();
+}
+```
+
+![image-20220717180050898](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220717180050898.png)
+
+
 
