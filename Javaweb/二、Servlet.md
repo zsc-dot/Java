@@ -537,10 +537,11 @@ private String makeNum() {
   }
   ```
   
+
 面试题：重定向和转发的区别？
-  
+
 相同点：页面都会跳转
-  
+
 不同点：请求转发的时候，url不会产生变化；重定向的时候，url地址栏会发生变化。
 
 ### 5、使用重定向实现登录
@@ -763,6 +764,16 @@ protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws Se
     session.invalidate();
 }
 ```
+
+```xml
+<!-- 设置Session的默认失效时间 -->
+<session-config>
+    <!-- 1分钟后，Session自动失效，以分钟为单位 -->
+    <session-timeout>1</session-timeout>
+</session-config>
+```
+
+
 
 ![image-20220717180050898](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220717180050898.png)
 
