@@ -220,7 +220,7 @@ Nacos配置更改后，微服务可以实现热更新，方式：
 
 无论profile如何变化，`[spring.application.name].yaml`这个文件一定会加载，因此多环境共享配置可以写入这个文件
 
-![image-20220814220220038](D:\Markdown笔记\asssets\image-20220814220220038.png)
+![image-20220814220220038](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220814220220038.png)
 
 
 
@@ -1264,5 +1264,401 @@ spring:
 
 1. 路由id：路由的唯一标示
 2. 路由目标（uri）：路由的目标地址，http代表固定地址，lb代表根据服务名负载均衡
-3. 路由断言（predicates）：判断路由的规则，
+3. 路由断言（predicates）：路由断言，判断请求是否符合要求，符合则转发到路由目的地
 4. 路由过滤器（filters）：对请求或响应做处理
+
+
+
+## 3.3、断言工厂
+
+- 我们在配置文件中写的断言规则只是字符串，这些字符串会被Predicate Factory读取并处理，转变为路由判断的条件。
+
+- 例如Path=/user/**是按照路径匹配，这个规则是由`org.springframework.cloud.gateway.handler.predicate.PathRoutePredicateFactory`类来处理的。
+
+- 像这样的断言工厂在SpringCloudGateway还有十几个。
+
+| **名称**   | **说明**                       | **示例**                                                     |
+| ---------- | ------------------------------ | ------------------------------------------------------------ |
+| After      | 是某个时间点后的请求           | -  After=2037-01-20T17:42:47.789-07:00[America/Denver]       |
+| Before     | 是某个时间点之前的请求         | -  Before=2031-04-13T15:14:47.433+08:00[Asia/Shanghai]       |
+| Between    | 是某两个时间点之前的请求       | -  Between=2037-01-20T17:42:47.789-07:00[America/Denver],  2037-01-21T17:42:47.789-07:00[America/Denver] |
+| Cookie     | 请求必须包含某些cookie         | - Cookie=chocolate, ch.p                                     |
+| Header     | 请求必须包含某些header         | - Header=X-Request-Id, \d+                                   |
+| Host       | 请求必须是访问某个host（域名） | -  Host=**.somehost.org,**.anotherhost.org                   |
+| Method     | 请求方式必须是指定方式         | - Method=GET,POST                                            |
+| Path       | 请求路径必须符合指定规则       | - Path=/red/{segment},/blue/**                               |
+| Query      | 请求参数必须包含指定参数       | - Query=name, Jack或者-  Query=name                          |
+| RemoteAddr | 请求者的ip必须是指定范围       | - RemoteAddr=192.168.1.1/24                                  |
+| Weight     | 权重处理                       |                                                              |
+
+
+
+我们只需要掌握Path这种路由工程就可以了。
+
+
+
+**总结**
+
+- PredicateFactory的作用是什么？
+
+  读取用户定义的断言条件，对请求做出判断
+
+- lPath=/user/**是什么含义？
+
+  路径是以/user开头的就认为是符合的
+
+
+
+## 3.4、过滤器工厂
+
+GatewayFilter是网关中提供的一种过滤器，可以对**进入网关的请求**和**微服务返回的响应**做处理：
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220817214434888.png" alt="image-20220817214434888" style="zoom: 67%;" />
+
+
+
+### 3.4.1、路由过滤器的种类
+
+Spring提供了31种不同的路由过滤器工厂。例如：
+
+| **名称**             | **说明**                     |
+| -------------------- | ---------------------------- |
+| AddRequestHeader     | 给当前请求添加一个请求头     |
+| RemoveRequestHeader  | 移除请求中的一个请求头       |
+| AddResponseHeader    | 给响应结果中添加一个响应头   |
+| RemoveResponseHeader | 从响应结果中移除有一个响应头 |
+| RequestRateLimiter   | 限制请求的流量               |
+
+
+
+### 3.4.2、请求头过滤器
+
+下面我们以AddRequestHeader 为例来讲解。
+
+> **需求**：给所有进入userservice的请求添加一个请求头：Truth=itcast is freaking awesome!
+
+
+
+只需要修改gateway服务的application.yml文件，给userservice的路由添加过滤即可：
+
+```yaml
+spring:
+  cloud:
+    gateway:
+      routes:
+      - id: user-service 
+        uri: lb://userservice 
+        predicates: 
+        - Path=/user/** 
+        filters: # 过滤器
+        - AddRequestHeader=Truth, Itcast is freaking awesome! # 添加请求头
+```
+
+当前过滤器写在userservice路由下，因此仅仅对访问userservice的请求有效。
+
+```java
+@Slf4j
+@RestController
+@RequestMapping("/user")
+// @RefreshScope
+public class UserController {
+    @Autowired
+    private UserService userService;
+    
+    @GetMapping("/{id}")
+    public User queryById(@PathVariable("id") Long id,
+                          @RequestHeader(value = "Truth", required = false) String truth) {
+        System.out.println("truth:" + truth);
+        return userService.queryById(id);
+    }
+}
+```
+
+访问http://localhost:10010/user/1，可以看到控制台有打印`truth:Itcast is freaking awesome`。
+
+
+
+### 3.4.3、默认过滤器
+
+如果要对所有的路由都生效，则可以将过滤器工厂写到default下。格式如下：
+
+```yaml
+spring:
+  cloud:
+    gateway:
+      routes:
+      - id: user-service 
+        uri: lb://userservice 
+        predicates: 
+        - Path=/user/**
+      default-filters: # 默认过滤项
+      - AddRequestHeader=Truth, Itcast is freaking awesome! 
+```
+
+
+
+### 3.4.4、总结
+
+- 过滤器的作用是什么？
+  - 对路由的请求或响应做加工处理，比如添加请求头
+  - 配置在路由下的过滤器只对当前路由的请求生效
+- defaultFilters的作用是什么？
+  - 对所有路由都生效的过滤器
+
+
+
+## 3.5、全局过滤器
+
+上一节学习的过滤器，网关提供了31种，但每一种过滤器的作用都是固定的。如果我们希望拦截请求，做自己的业务逻辑则没办法实现。
+
+
+
+### 3.5.1、全局过滤器作用
+
+全局过滤器的作用也是处理一切进入网关的请求和微服务响应，与GatewayFilter的作用一样。区别在于GatewayFilter通过配置定义，处理逻辑是固定的；而GlobalFilter的逻辑需要自己写代码实现。
+
+定义方式是实现GlobalFilter接口。
+
+```java
+public interface GlobalFilter {
+    /**
+     *  处理当前请求，有必要的话通过{@link GatewayFilterChain}将请求交给下一个过滤器处理
+     *
+     * @param exchange 请求上下文，里面可以获取Request、Response等信息
+     * @param chain 用来把请求委托给下一个过滤器 
+     * @return {@code Mono<Void>} 返回标示当前过滤器业务结束
+     */
+    Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain);
+}
+```
+
+
+
+在filter中编写自定义逻辑，可以实现下列功能：
+
+- 登录状态判断
+- 权限校验
+- 请求限流等
+
+
+
+### 3.5.2、自定义全局过滤器
+
+需求：定义全局过滤器，拦截请求，判断请求的参数是否满足下面条件：
+
+- 参数中是否有authorization，
+- authorization参数值是否为admin
+
+如果同时满足则放行，否则拦截。
+
+
+
+实现：
+
+在gateway中定义一个过滤器：
+
+```java
+@Order(-1) // 定义执行顺序，value值越小，执行优先级越高。在其他过滤器之前执行
+@Component
+public class AuthorizeFilter implements GlobalFilter {
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        // 1.获取请求参数
+        ServerHttpRequest request = exchange.getRequest();
+        // 2.获取参数中的 authorization 参数
+        MultiValueMap<String, String> params = request.getQueryParams();
+        String auth = params.getFirst("authorization");
+        // 3. 判断参数值是否等于admin
+        if ("admin".equals(auth)) {
+            // 4. 是，放行
+            return chain.filter(exchange);
+        }
+        // 5. 否，拦截
+        // 5.1. 设置状态码 401代表未登录
+        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+        // 5.2. 拦截请求
+        return exchange.getResponse().setComplete();
+    }
+}
+```
+
+
+
+使用http://localhost:10010/user/1?authorization=admin访问，可访问成功。
+
+使用http://localhost:10010/user/1?authorization=admin414访问，会访问失败，显示401。
+
+
+
+### 3.5.3、过滤器执行顺序
+
+请求进入网关会碰到三类过滤器：当前路由的过滤器、DefaultFilter、GlobalFilter
+
+请求路由后，会将当前路由过滤器和DefaultFilter、GlobalFilter，合并到一个过滤器链（集合）中，排序后依次执行每个过滤器：
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220817222345529.png" alt="image-20220817222345529" style="zoom:67%;" />
+
+
+
+排序的规则是什么呢？
+
+- 每一个过滤器都必须指定一个int类型的order值，**order值越小，优先级越高，执行顺序越靠前**。
+- GlobalFilter通过实现Ordered接口，或者添加@Order注解来指定order值，由我们自己指定
+- 路由过滤器和defaultFilter的order由Spring指定，默认是按照声明顺序从1递增。
+- 当过滤器的order值一样时，会按照 defaultFilter > 路由过滤器 > GlobalFilter的顺序执行。
+
+
+
+详细内容，可以查看源码：
+
+`org.springframework.cloud.gateway.route.RouteDefinitionRouteLocator#getFilters()`方法是先加载defaultFilters，然后再加载某个route的filters，然后合并。
+
+`org.springframework.cloud.gateway.handler.FilteringWebHandler#handle()`方法会加载全局过滤器，与前面的过滤器合并后根据order排序，组织过滤器链
+
+
+
+### 3.5.4、总结
+
+- 全局过滤器的作用是什么？
+  - 对所有路由都生效的过滤器，并且可以自定义处理逻辑
+- 实现全局过滤器的步骤？
+  - 实现GlobalFilter接口
+  - 添加@Order注解或实现Ordered接口
+  - 编写处理逻辑
+
+- 路由过滤器、defaultFilter、全局过滤器的执行顺序？
+  - order值越小，优先级越高
+  - 当order值一样时，顺序是defaultFilter最先，然后是局部的路由过滤器，最后是全局过滤器
+
+
+
+## 3.6、跨域问题
+
+
+
+### 3.6.1、什么是跨域问题
+
+跨域：域名不一致就是跨域，主要包括：
+
+- 域名不同： www.taobao.com 和 www.taobao.org 和 www.jd.com 和 miaosha.jd.com
+- 域名相同，端口不同：localhost:8080和localhost8081
+
+跨域问题：浏览器禁止请求的发起者与服务端发生跨域ajax请求，请求被浏览器拦截的问题
+
+
+
+解决方案：CORS，这个以前应该学习过，这里不再赘述了。不知道的小伙伴可以查看https://www.ruanyifeng.com/blog/2016/04/cors.html
+
+
+
+### 3.6.2、模拟跨域问题
+
+找到课前资料的页面文件：
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220817223422084.png" alt="image-20220817223422084" style="zoom: 80%;" />
+
+放入tomcat或者nginx这样的web服务器中，启动并访问。
+
+可以在浏览器控制台看到下面的错误：
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220817223453311.png" alt="image-20220817223453311" style="zoom: 80%;" />
+
+从localhost:8090访问localhost:10010，端口不同，显然是跨域的请求。
+
+
+
+### 3.6.3、解决跨域问题
+
+在gateway服务的application.yml文件中，添加下面的配置：
+
+```yaml
+spring:
+  cloud:
+    gateway:
+      # 。。。
+      globalcors: # 全局的跨域处理
+        add-to-simple-url-handler-mapping: true # 解决options请求被拦截问题
+        corsConfigurations:
+          '[/**]':
+            allowedOrigins: # 允许哪些网站的跨域请求 
+              - "http://localhost:8090"
+            allowedMethods: # 允许的跨域ajax的请求方式
+              - "GET"
+              - "POST"
+              - "DELETE"
+              - "PUT"
+              - "OPTIONS"
+            allowedHeaders: "*" # 允许在请求中携带的头信息
+            allowCredentials: true # 是否允许携带cookie
+            maxAge: 360000 # 这次跨域检测的有效期
+```
+
+
+
+### 3.6.4、总结
+
+CORS跨域要配置的参数包括哪几个？
+
+- 允许哪些域名跨域？
+- 允许哪些请求头？
+- 允许哪些请求方式？
+- 是否允许使用cookie？
+- 有效期是多久？
+
+
+
+# 4、拓展：限流过滤器
+
+**限流**：对应用服务器的请求做限制，避免因过多请求而导致服务器过载甚至宕机。限流算法常见的包括两种：
+
+- 计数器算法，又包括窗口计数器算法、滑动窗口计数器算法
+- 漏桶算法(Leaky Bucket)
+- 令牌桶算法（Token Bucket）
+
+
+
+## 4.1、计数器算法
+
+固定窗口计数器算法概念如下：
+
+- 将时间划分为多个窗口；
+- 在每个窗口内每有一次请求就将计数器加一，当时间到达下一个窗口时，计数器重置。
+- 如果计数器超过了限制数量，则本窗口内所有的请求都被丢弃。
+
+![image-20220817224201858](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220817224201858.png)
+
+
+
+## 4.2、漏桶算法
+
+漏桶算法说明：
+
+- 将每个请求视作"水滴"放入"漏桶"进行存储；
+- "漏桶"以固定速率向外"漏"出请求来执行，如果"漏桶"空了则停止"漏水”；
+- 如果"漏桶"满了则多余的"水滴"会被直接丢弃。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220817224337057.png" alt="image-20220817224337057" style="zoom: 67%;" />
+
+
+
+## 4.3、令牌桶算法
+
+漏桶算法说明：
+
+- 以固定的速率生成令牌，存入令牌桶中，如果令牌桶满了以后，多余令牌丢弃
+- 请求进入后，必须先尝试从桶中获取令牌，获取到令牌后才可以被处理
+- 如果令牌桶中没有令牌，则请求等待或丢弃
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220817224519353.png" alt="image-20220817224519353" style="zoom:67%;" />
+
+
+
+## 4.3、总结
+
+- 限流有什么作用？
+  - 限流是保护服务器，避免因过多请求而导致服务器过载甚至宕机
+
+- 限流算法：
+  - 计数器算法
+  - 漏桶算法
+  - 令牌桶算法
