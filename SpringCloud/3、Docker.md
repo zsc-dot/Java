@@ -221,7 +221,7 @@ DockerHub：
 
 
 
-## 1.4、安装Docker
+## 1.4、CentOS安装Docker
 
 企业部署一般都是采用Linux操作系统，而其中又数CentOS发行版占比最多，因此我们在CentOS下安装Docker。
 
@@ -233,13 +233,11 @@ Docker CE 分为 `stable` `test` 和 `nightly` 三个更新频道。
 
 
 
-### 1.4.1、CentOS安装Docker
-
 Docker CE 支持 64 位版本 CentOS 7，并且要求内核版本不低于 3.10， CentOS 7 满足最低内核的要求，所以我们在CentOS 7安装Docker。
 
 
 
-#### 1、卸载（可选）
+### 1.4.1、卸载（可选）
 
 如果之前安装过旧版本的Docker，可以使用下面命令卸载：
 
@@ -259,7 +257,7 @@ yum remove docker \
 
 
 
-#### 2、安装docker
+### 1.42、安装docker
 
 首先需要大家虚拟机联网，安装yum工具
 
@@ -294,7 +292,7 @@ docker-ce为社区免费版本。稍等片刻，docker即可安装成功。
 
 
 
-#### 3、启动docker
+### 1.4.3、启动docker
 
 Docker应用需要用到各种端口，逐一去修改防火墙设置。非常麻烦，因此建议大家直接关闭防火墙！
 
@@ -331,7 +329,7 @@ docker -v
 
 
 
-#### 4、配置镜像加速
+### 1.4.4、配置镜像加速
 
 docker官方镜像仓库网速较差，我们需要设置国内镜像服务：
 
@@ -447,4 +445,939 @@ docker官方镜像仓库网速较差，我们需要设置国内镜像服务：
 
 
 
+### 2.1.6、总结
+
+镜像操作有哪些？
+
+- docker images
+- docker rmi
+- docker pull
+- docker push
+- docker save 
+- docker load
+
+
+
 ## 2.2、容器操作
+
+
+
+### 2.2.1、容器相关命令
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220821100830605.png" alt="image-20220821100830605" style="zoom: 67%;" />
+
+容器保护三个状态：
+
+- 运行：进程正常运行
+- 暂停：进程暂停，CPU不再运行，并不释放内存
+- 停止：进程终止，回收进程占用的内存、CPU等资源
+
+
+
+其中：
+
+- docker run：创建并运行一个容器，处于运行状态
+- docker pause：让一个运行的容器暂停
+- docker unpause：让一个容器从暂停状态恢复运行
+- docker stop：停止一个运行的容器
+- docker start：让一个停止的容器再次运行
+
+- docker rm：删除一个容器
+
+
+
+### 2.2.2、案例-创建并运行一个容器
+
+去docker hub查看Nginx的容器运行命令
+
+```sh
+docker run --name containerName -p 80:80 -d nginx
+```
+
+命令解读：
+
+- docker run ：创建并运行一个容器
+- --name : 给容器起一个名字，比如叫做mn
+- -p ：将宿主机端口与容器端口映射，冒号左侧是宿主机端口，右侧是容器端口
+- -d：后台运行容器
+- nginx：镜像名称，例如nginx
+
+
+
+这里的`-p`参数，是将容器端口映射到宿主机端口。宿主机端口可以自定义，容器内的端口取决于应用程序的默认端口。
+
+默认情况下，容器是隔离环境，我们直接访问宿主机的80端口，肯定访问不到容器中的nginx。
+
+现在，将容器的80与宿主机的80关联起来，当我们访问宿主机的80端口时，就会被映射到容器的80，这样就能访问到nginx了：
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220821101423950.png" alt="image-20220821101423950" style="zoom: 67%;" />
+
+
+
+容器运行：
+
+![image-20220821102646623](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220821102646623.png)
+
+
+
+容器运行成功后，返回的一串数字是容器的唯一ID。
+
+访问宿主机的IP和映射端口即可访问nginx。
+
+通过`docker logs 容器名称`可以查看容器运行日志，里面包含请求日志。 
+
+
+
+### 2.2.3、案例-进入容器，修改文件
+
+**需求**：进入Nginx容器，修改HTML文件内容，添加“传智教育欢迎您”
+
+**提示**：进入容器要用到docker exec命令。
+
+
+
+**步骤**：
+
+1. 进入容器。进入我们刚刚创建的nginx容器的命令为：
+
+   ```sh
+   docker exec -it mn bash
+   ```
+
+   命令解读：
+
+   - docker exec ：进入容器内部，执行一个命令
+   - -it : 给当前进入的容器创建一个标准输入、输出终端，允许我们与容器交互
+   - mn ：要进入的容器的名称
+   - bash：进入容器后执行的命令，bash是一个linux终端交互命令
+
+2. 进入nginx的HTML所在目录 /usr/share/nginx/html
+
+   容器内部会模拟一个独立的Linux文件系统，看起来如同一个linux服务器一样。
+
+   nginx的环境、配置、运行文件全部都在这个文件系统中，包括我们要修改的html文件。
+
+   查看DockerHub网站中的nginx页面，可以知道nginx的html目录位置在`/usr/share/nginx/html`
+
+   我们执行命令，进入该目录：
+
+   ```sh
+   cd /usr/share/nginx/html
+   ```
+
+   查看目录下文件：
+
+   <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220821103810627.png" alt="image-20220821103810627" style="zoom: 80%;" />
+
+3. 修改index.html的内容
+
+   容器内没有vi命令，无法直接修改，我们用下面的命令来修改：
+
+   ```sh
+   sed -i -e 's#Welcome to nginx#传智教育欢迎您#g' -e 's#<head>#<head><meta charset="utf-8">#g' index.html
+   ```
+
+   用`传智教育欢迎您`替换`Welcome to nginx`，用`<head><meta charset="utf-8">`替换`<head>`。
+
+   在浏览器访问自己的虚拟机地址，即可看到结果：
+
+   <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220821104500115.png" alt="image-20220821104500115" style="zoom:80%;" />
+
+通过`exit`命令退出容器，并关闭容器：
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220821104646335.png" alt="image-20220821104646335" style="zoom:80%;" />
+
+> 注意：docker ps 命令只能展示运行中的容器，docker ps -a 可以查看全部的容器。
+
+
+
+### 2.2.4、练习
+
+**需求：**创建并运行一个redis容器，并且支持持久化
+
+1. 到DockerHub搜索Redis镜像
+
+2. 查看Redis镜像文档中的帮助信息
+
+3. 利用docker run 命令运行一个Redis容器
+
+   ```sh
+   docker run --name redis -p 6379:6379 -d redis redis-server --appendonly yes
+   ```
+
+   --appendonly yes：开启AOF持久化
+
+
+
+**需求：**进入redis容器，并执行redis-cli客户端命令，存入num=666
+
+1. 进入redis容器
+
+   ```sh
+   docker exec -it redis bash
+   ```
+
+2. 执行redis-cli客户端命令
+
+   ```sh
+   redis-cli
+   ```
+
+3. 设置数据num=666
+
+   ```sh
+   set num 666
+   ```
+
+
+
+### 2.2.5、总结
+
+docker run命令的常见参数有哪些？
+
+- --name：指定容器名称
+- -p：指定端口映射
+- -d：让容器后台运行
+
+查看容器日志的命令：
+
+- docker logs
+- 添加 -f 参数可以持续查看日志
+
+查看容器状态：
+
+- docker ps
+- 添加-a参数查看所有状态的容器
+
+删除容器：
+
+- docker rm
+- 不能删除运行中的容器，除非添加 -f 参数
+
+进入容器：
+
+- 命令是docker exec -it [容器名] [要执行的命令]
+- exec命令可以进入容器修改文件，但是在容器内修改文件是不推荐的
+
+
+
+## 2.3、数据卷（容器数据管理）
+
+在之前的nginx案例中，修改nginx的html页面时，需要进入nginx内部。并且因为没有编辑器，修改文件也很麻烦。
+
+这就是因为容器与数据（容器内文件）耦合带来的后果。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220821105906542.png" alt="image-20220821105906542" style="zoom:80%;" />
+
+要解决这个问题，必须将数据与容器解耦，这就要用到数据卷了。
+
+
+
+### 2.3.1、什么是数据卷
+
+**数据卷（volume）**是一个虚拟目录，指向宿主机文件系统中的某个目录。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220821110255579.png" alt="image-20220821110255579" style="zoom:67%;" />
+
+一旦完成数据卷挂载，对容器的一切操作都会作用在数据卷对应的宿主机目录了。
+
+宿主机修改文件内容，会反映到对应数据卷关联的容器内部。
+
+这样，我们操作宿主机的/var/lib/docker/volumes/html目录，就等于操作容器内的/usr/share/nginx/html目录了。
+
+两个容器可以挂载同一个数据卷，实现数据共享。
+
+如果删除容器，但是数据卷还在，新的容器继续挂载到数据卷上，就可以共享以前的数据。
+
+
+
+### 2.3.2、数据卷操作命令
+
+数据卷操作的基本语法如下：
+
+```sh
+docker volume [COMMAND]
+```
+
+docker volume命令是数据卷操作，根据命令后跟随的command来确定下一步的操作：
+
+- create        创建一个volume
+- inspect      显示一个或多个volume的信息
+- ls                列出所有的volume
+- prune        删除未使用的volume
+- rm              删除一个或多个指定的volume
+
+
+
+### 2.3.3、创建和查看数据卷
+
+**需求**：创建一个数据卷，并查看数据卷在宿主机的目录位置
+
+1. 创建数据卷
+
+   ```sh
+   docker volume create html
+   ```
+
+2. 查看所有数据
+
+   ```sh
+   docker volume ls
+   ```
+
+   结果：
+
+   <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220821200417052.png" alt="image-20220821200417052" style="zoom:80%;" />
+
+3. 查看数据卷详细信息卷
+
+   ```sh
+   docker volume inspect html
+   ```
+
+   <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220821200528329.png" alt="image-20220821200528329" style="zoom:80%;" />
+
+   可以看到，我们创建的html这个数据卷关联的宿主机目录为`/var/lib/docker/volumes/html/_data`目录。
+
+
+
+### 2.3.4、挂载数据卷
+
+我们在创建容器时，可以通过 -v 参数来挂载一个数据卷到某个容器内目录，命令格式如下：
+
+```sh
+docker run \
+  --name mn \
+  -v html:/root/html \
+  -p 8080:80
+  nginx \
+```
+
+这里的-v就是挂载数据卷的命令：
+
+- `-v html:/root/htm` ：把html数据卷挂载到容器内的/root/html这个目录中
+
+
+
+### 2.3.5、案例-给nginx挂载数据卷
+
+**需求**：创建一个nginx容器，修改容器内的html目录内的index.html内容
+
+**分析**：上个案例中，我们进入nginx容器内部，已经知道nginx的html目录所在位置/usr/share/nginx/html ，我们需要把这个目录挂载到html这个数据卷上，方便操作其中的内容。
+
+**提示**：运行容器时使用 -v 参数挂载数据卷
+
+**步骤：**
+
+1. 创建容器并挂载数据卷到容器内的HTML目录
+
+   ```sh
+   docker run --name mn -v html:/usr/share/nginx/html -p 80:80 -d nginx
+   ```
+
+   创建完成后，可以看到数据卷关联的宿主机目录`/var/lib/docker/volumes/html/_data`里面出现了nginx容器的配置文件。
+
+   如果容器运行时volume不存在，会自动被创建出来。
+
+   <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220821201614314.png" alt="image-20220821201614314" style="zoom:80%;" />
+
+2. 进入html数据卷所在位置，并修改HTML内容
+
+   ```sh
+   # 查看html数据卷的位置
+   docker volume inspect html
+   # 进入该目录
+   cd /var/lib/docker/volumes/html/_data
+   # 修改文件
+   vi index.html
+   ```
+
+
+
+### 2.3.6、案例-给MySQL挂载本地目录
+
+容器不仅仅可以挂载数据卷，也可以直接挂载到宿主机目录上。关联关系如下：
+
+- 带数据卷模式：宿主机目录 --> 数据卷 ---> 容器内目录
+- 直接挂载模式：宿主机目录 ---> 容器内目录
+
+
+
+**语法**：
+
+目录挂载与数据卷挂载的语法是类似的：
+
+- -v [宿主机目录]:[容器内目录]
+- -v [宿主机文件]:[容器内文件]
+
+
+
+**需求**：创建并运行一个MySQL容器，将宿主机目录直接挂载到容器
+
+实现思路如下：
+
+1. 在将课前资料中的mysql.tar文件上传到虚拟机，通过load命令加载为镜像
+
+2. 创建目录/tmp/mysql/data
+
+3. 创建目录/tmp/mysql/conf，将课前资料提供的hmy.cnf文件上传到/tmp/mysql/conf
+
+4. 去DockerHub查阅资料，创建并运行MySQL容器，要求：
+   - 挂载/tmp/mysql/data到mysql容器内数据存储目录  /var/lib/mysql
+   - 挂载/tmp/mysql/conf/hmy.cnf到mysql容器的配置文件  /etc/mysql/conf.d/hmy.cnf
+   - 设置MySQL密码
+
+
+
+### 2.3.7、数据挂载方式的对比
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220821204038293.png" alt="image-20220821204038293" style="zoom:50%;" />
+
+
+
+### 2.3.8、总结
+
+数据卷的作用：
+
+- 将容器与数据分离，解耦合，方便操作容器内数据，保证数据安全
+
+
+
+数据卷操作：
+
+- docker volume create
+- docker volume ls
+- docker volume inspect
+- docker volume rm
+- docker volume prune
+
+
+
+数据卷挂载方式：
+
+- -v 数据卷名称: 容器文件路径
+- 如果容器运行时volume不存在，会自动被创建出来
+
+
+
+docker run的命令中通过 -v 参数挂载文件或目录到容器中：
+
+- -v volume名称:容器内目录
+- -v 宿主机文件:容器内文件
+- -v 宿主机目录:容器内目录
+
+
+
+数据卷挂载与目录直接挂载的
+
+- 数据卷挂载耦合度低，由docker来管理目录，但是目录较深，不好找
+- 目录挂载耦合度高，需要我们自己管理目录，不过目录容易寻找查看
+
+
+
+# 3、Dockerfile自定义镜像
+
+常见的镜像在DockerHub就能找到，但是我们自己写的项目就必须自己构建镜像了。
+
+而要自定义镜像，就必须先了解镜像的结构才行。
+
+
+
+## 3.1、镜像结构
+
+镜像是将应用程序及其需要的系统函数库、环境、配置、依赖打包而成。
+
+我们以MySQL为例，来看看镜像的组成结构：
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220821205623174.png" alt="image-20220821205623174" style="zoom:50%;" />
+
+简单来说，镜像就是在系统函数库、运行环境基础上，添加应用程序文件、配置文件、依赖文件等组合，然后编写好启动脚本打包在一起形成的文件。
+
+我们要构建镜像，其实就是实现上述打包的过程。
+
+
+
+**总结：**
+
+镜像是分层结构，每一层称为一个Layer
+
+- BaseImage层：包含基本的系统函数库、环境变量、文件系统
+- Entrypoint：入口，是镜像中应用启动的命令
+- 其它：在BaseImage基础上添加依赖、安装程序、完成整个应用的安装和配置
+
+
+
+## 3.2、Dockerfile语法
+
+构建自定义的镜像时，并不需要一个个文件去拷贝，打包。
+
+我们只需要告诉Docker，我们的镜像的组成，需要哪些BaseImage、需要拷贝什么文件、需要安装什么依赖、启动脚本是什么，将来Docker会帮助我们构建镜像。
+
+而描述上述信息的文件就是Dockerfile文件。
+
+
+
+**Dockerfile**就是一个文本文件，其中包含一个个的**指令(Instruction)**，用指令来说明要执行什么操作来构建镜像。每一个指令都会形成一层Layer。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220821210421516.png" alt="image-20220821210421516" style="zoom: 67%;" />
+
+
+
+更新详细语法说明，请参考官网文档： https://docs.docker.com/engine/reference/builder
+
+
+
+## 3.3、构建Java项目
+
+
+
+### 3.3.1、基于Ubuntu构建Java项目
+
+**需求：**基于Ubuntu镜像构建一个新镜像，运行一个java项目
+
+- 步骤1：新建一个空文件夹docker-demo
+
+- 步骤2：拷贝课前资料中的docker-demo.jar文件到docker-demo这个目录
+
+- 步骤3：拷贝课前资料中的jdk8.tar.gz文件到docker-demo这个目录
+
+- 步骤4：拷贝课前资料提供的Dockerfile到docker-demo这个目录
+
+  其中的内容如下：
+
+  ```dockerfile
+  # 指定基础镜像
+  FROM ubuntu:16.04
+  # 配置环境变量，JDK的安装目录
+  ENV JAVA_DIR=/usr/local
+  
+  # 拷贝jdk和java项目的包
+  COPY ./jdk8.tar.gz $JAVA_DIR/
+  COPY ./docker-demo.jar /tmp/app.jar
+  
+  # 安装JDK
+  RUN cd $JAVA_DIR \
+   && tar -xf ./jdk8.tar.gz \
+   && mv ./jdk1.8.0_144 ./java8
+  
+  # 配置环境变量
+  ENV JAVA_HOME=$JAVA_DIR/java8
+  ENV PATH=$PATH:$JAVA_HOME/bin
+  
+  # 暴露端口
+  EXPOSE 8090
+  # 入口，java项目的启动命令
+  ENTRYPOINT java -jar /tmp/app.jar
+  ```
+
+  
+
+- 步骤5：进入docker-demo
+
+  将准备好的docker-demo上传到虚拟机任意目录，然后进入docker-demo目录下
+
+- 步骤6：运行命令
+
+  ```sh'
+  docker build -t javaweb:1.0 .
+  ```
+
+  javaweb:1.0 镜像名称
+
+  `.`：本目录，本案例中指Dockerfile所在的目录
+
+  最后访问 http://192.168.150.101:8090/hello/count，其中的ip改成你的虚拟机ip
+
+
+
+### 3.3.2、基于java8构建Java项目
+
+虽然我们可以基于Ubuntu基础镜像，添加任意自己需要的安装包，构建镜像，但是却比较麻烦。所以大多数情况下，我们都可以在一些安装了部分软件的基础镜像上做改造。
+
+例如，构建java项目的镜像，可以在已经准备了JDK的基础镜像基础上构建。
+
+
+
+**需求：**基于java:8-alpine镜像，将一个Java项目构建为镜像
+
+实现思路如下：
+
+- 新建一个空的目录，然后在目录中新建一个文件，命名为Dockerfile
+
+- 拷贝课前资料提供的docker-demo.jar到这个目录中
+
+- 编写Dockerfile文件：
+
+  - 基于java:8-alpine作为基础镜像
+
+  - 将app.jar拷贝到镜像中
+
+  - 暴露端口
+
+  - 编写入口ENTRYPOINT
+
+    内容如下：
+
+    ```dockerfile
+    FROM java:8-alpine
+    COPY ./app.jar /tmp/app.jar
+    EXPOSE 8090
+    ENTRYPOINT java -jar /tmp/app.jar
+    ```
+
+- 使用docker build命令构建镜像
+
+- 使用docker run创建容器并运行
+
+
+
+### 3.3、总结
+
+- Dockerfile的本质是一个文件，通过指令描述镜像的构建过程
+- Dockerfile的第一行必须是FROM，从一个基础镜像来构建
+- 基础镜像可以是基本操作系统，如Ubuntu。也可以是其他人制作好的镜像，例如：java:8-alpine
+
+
+
+# 4、Docker-Compose
+
+Docker Compose可以基于Compose文件帮我们快速的部署分布式应用，而无需手动一个个创建和运行容器。
+
+
+
+## 4.1.1、初识DockerCompose
+
+Compose文件是一个文本文件，通过指令定义集群中的每个容器如何运行。格式如下：
+
+```json
+version: "3.8"
+ services:
+  mysql:
+    image: mysql:5.7.25
+    environment:
+     MYSQL_ROOT_PASSWORD: 123 
+    volumes:
+     - "/tmp/mysql/data:/var/lib/mysql"
+     - "/tmp/mysql/conf/hmy.cnf:/etc/mysql/conf.d/hmy.cnf"
+  web:
+    build: .
+    ports:
+     - "8090:8090"
+```
+
+上面的Compose文件就描述一个项目，其中包含两个容器：
+
+- mysql：一个基于`mysql:5.7.25`镜像构建的容器，并且挂载了两个目录
+- web：一个基于`docker build`临时构建的镜像容器，映射端口时8090
+
+
+
+其实DockerCompose文件可以看做是将多个docker run命令写到一个文件，只是语法稍有差异。
+
+DockerCompose的详细语法参考官网：https://docs.docker.com/compose/compose-file/
+
+
+
+## 4.2、安装DockerCompose
+
+
+
+### 4.2.1、下载
+
+Linux下需要通过命令下载：
+
+```sh
+# 安装
+curl -L https://github.com/docker/compose/releases/download/1.23.1/docker-compose-`uname -s`-`uname -m` > /usr/local/bin/docker-compose
+```
+
+如果下载速度较慢，或者下载失败，可以直接上传文件，上传目录为：`/usr/local/bin/`
+
+
+
+### 4.2.2、修改文件权限
+
+修改文件权限：
+
+```sh
+# 修改权限
+chmod +x /usr/local/bin/docker-compose
+```
+
+
+
+### 4.2.3、Base自动补全命令：
+
+```sh
+# 补全命令
+curl -L https://raw.githubusercontent.com/docker/compose/1.29.1/contrib/completion/bash/docker-compose > /etc/bash_completion.d/docker-compose
+```
+
+如果这里出现错误，需要修改自己的hosts文件：
+
+```sh
+echo "199.232.68.133 raw.githubusercontent.com" >> /etc/hosts
+```
+
+
+
+### 4.2.4、总结
+
+DockerCompose有什么作用？
+
+- 帮助我们快速部署分布式应用，无需一个个微服务去构建镜像和部署。
+
+
+
+## 4.3、部署微服务集群
+
+**需求**：将之前学习的cloud-demo微服务集群利用DockerCompose部署
+
+
+
+**实现思路**：
+
+- 查看课前资料提供的cloud-demo文件夹，里面已经编写好了docker-compose文件
+- 修改自己的cloud-demo项目，将数据库、nacos地址都命名为docker-compose中的服务名
+- 使用maven打包工具，将项目中的每个微服务都打包为app.jar
+- 将打包好的app.jar拷贝到cloud-demo中的每一个对应的子目录中
+- 将cloud-demo上传至虚拟机，利用 docker-compose up -d 来部署
+
+
+
+### 4.3.1、compose文件
+
+查看课前资料提供的cloud-demo文件夹，里面已经编写好了docker-compose文件，而且每个微服务都准备了一个独立的目录。
+
+`docker-compose.yml`内容如下：
+
+```yaml
+version: "3.2"
+
+services:
+  nacos:
+    image: nacos/nacos-server
+    environment:
+      MODE: standalone
+    ports:
+      - "8848:8848"
+  mysql:
+    image: mysql:5.7.25
+    environment:
+      MYSQL_ROOT_PASSWORD: 123
+    volumes:
+      - "$PWD/mysql/data:/var/lib/mysql"
+      - "$PWD/mysql/conf:/etc/mysql/conf.d/"
+  userservice:
+    build: ./user-service
+  orderservice:
+    build: ./order-service
+  gateway:
+    build: ./gateway
+    ports:
+      - "10010:10010"
+```
+
+可以看到，其中包含5个service服务：
+
+- `nacos`：作为注册中心和配置中心
+  - `image: nacos/nacos-server`： 基于nacos/nacos-server镜像构建
+  - `environment`：环境变量
+    - `MODE: standalone`：单点模式启动
+  - `ports`：端口映射，这里暴露了8848端口
+- `mysql`：数据库
+  - `image: mysql:5.7.25`：镜像版本是mysql:5.7.25
+  - `environment`：环境变量
+    - `MYSQL_ROOT_PASSWORD: 123`：设置数据库root账户的密码为123
+  - `volumes`：数据卷挂载，这里挂载了mysql的data、conf目录，其中有提前准备好的数据
+- `userservice`、`orderservice`、`gateway`：都是基于Dockerfile临时构建的
+
+查看mysql目录，可以看到其中已经准备好了cloud_order、cloud_user表。
+
+查看微服务目录，可以看到都包含Dockerfile文件。
+
+内容如下：
+
+```dockerfile
+FROM java:8-alpine
+COPY ./app.jar /tmp/app.jar
+ENTRYPOINT java -jar /tmp/app.jar
+```
+
+
+
+### 4.3.2、修改微服务配置
+
+因为微服务将来要部署为docker容器，而容器之间互联不是通过IP地址，而是通过容器名。这里我们将order-service、user-service、gateway服务的mysql、nacos地址都修改为基于容器名的访问。
+
+如下所示：
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:mysql://mysql:3306/cloud_order?useSSL=false
+    username: root
+    password: 123
+    driver-class-name: com.mysql.jdbc.Driver
+  application:
+    name: orderservice
+  cloud:
+    nacos:
+      server-addr: nacos:8848 # nacos服务地址
+```
+
+
+
+### 4.3.3、打包
+
+接下来需要将我们的每个微服务都打包。因为之前查看到Dockerfile中的jar包名称都是app.jar，因此我们的每个微服务都需要用这个名称。
+
+可以通过修改pom.xml中的打包名称来实现，每个微服务都需要修改：
+
+```xml
+<build>
+  <!-- 服务打包的最终名称 -->
+  <finalName>app</finalName>
+  <plugins>
+    <plugin>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-maven-plugin</artifactId>
+    </plugin>
+  </plugins>
+</build>
+```
+
+
+
+### 4.3.4、拷贝jar包到部署目录
+
+编译打包好的app.jar文件，需要放到Dockerfile的同级目录中。注意：每个微服务的app.jar放到与服务名称对应的目录，别搞错了。
+
+
+
+### 4.3.5、部署
+
+最后，我们需要将文件整个cloud-demo文件夹上传到虚拟机中，由DockerCompose部署。
+
+上传到任意目录。
+
+进入cloud-demo目录，然后运行下面的命令进行部署：
+
+```sh
+docker-compose up -d
+```
+
+
+
+docker-compose可以指定服务间的依赖关系，orderservice和userservice都依赖于nacos，可以配置依赖关系，解决其他服务先于nacos启动的问题。
+
+
+
+# 5、Docker镜像仓库 
+
+镜像仓库（ Docker Registry ）有公共的和私有的两种形式：
+
+- 公共仓库：例如Docker官方的 [Docker Hub](https://hub.docker.com/)，国内也有一些云服务商提供类似于 Docker Hub 的公开服务，比如 [网易云镜像服务](https://c.163.com/hub)、[DaoCloud](https://hub.daocloud.io/)[ ](https://hub.daocloud.io/)[镜像服务](https://hub.daocloud.io/)、[阿里云镜像服务](https://cr.console.aliyun.com/)等。
+- 除了使用公开仓库外，用户还可以在本地搭建私有 Docker Registry。企业自己的镜像最好是采用私有Docker Registry来实现。
+
+
+
+搭建镜像仓库可以基于Docker官方提供的DockerRegistry来实现。
+
+官网地址：https://hub.docker.com/_/registry
+
+
+
+## 5.1、简化版镜像仓库
+
+Docker官方的Docker Registry是一个基础版本的Docker镜像仓库，具备仓库管理的完整功能，但是没有图形化界面。
+
+搭建方式比较简单，命令如下：
+
+```sh
+docker run -d \
+    --restart=always \
+    --name registry	\
+    -p 5000:5000 \
+    -v registry-data:/var/lib/registry \
+    registry
+```
+
+命令中挂载了一个数据卷registry-data到容器内的/var/lib/registry 目录，这是私有镜像库存放数据的目录。
+
+访问http://YourIp:5000/v2/_catalog 可以查看当前私有镜像服务中包含的镜像
+
+
+
+## 5.2、带有图形化界面版本
+
+使用DockerCompose部署带有图象界面的DockerRegistry，命令如下：
+
+```yaml
+version: '3.0'
+services:
+  registry:
+    image: registry
+    volumes:
+      - ./registry-data:/var/lib/registry
+  ui:
+    image: joxit/docker-registry-ui:static
+    ports:
+      - 8080:80
+    environment:
+      - REGISTRY_TITLE=私有仓库
+      - REGISTRY_URL=http://registry:5000
+    depends_on:
+      - registry
+```
+
+
+
+## 5.3、配置Docker信任地址
+
+我们的私服采用的是http协议，默认不被Docker信任，所以需要做一个配置：
+
+```sh
+# 打开要修改的文件
+vi /etc/docker/daemon.json
+# 添加内容：
+"insecure-registries":["http://192.168.150.101:8080"]
+# 重加载
+systemctl daemon-reload
+# 重启docker
+systemctl restart docker
+```
+
+
+
+## 5.4、推送、拉取镜像
+
+推送镜像到私有镜像服务必须先tag，步骤如下：
+
+- 重新tag本地镜像，名称前缀为私有仓库的地址：192.168.150.101:8080/
+
+  ```sh
+  docker tag nginx:latest 192.168.150.101:8080/nginx:1.0
+  ```
+
+- 推送镜像
+
+  ```sh
+  docker push 192.168.150.101:8080/nginx:1.0
+  ```
+
+- 拉取镜像
+
+  ```sh
+  docker pull 192.168.150.101:8080/nginx:1.0
+  ```
+
+
+
+
+## 5.5、总结
+
+- 推送本地镜像到仓库前都必须重命名(docker tag)镜像，以镜像仓库地址为前缀
+- 镜像仓库推送前需要把仓库地址配置到docker服务的daemon.json文件中，被docker信任
+- 推送使用docker push命令
+- 拉取使用docker pull命令
