@@ -916,3 +916,713 @@ void testSuggest() throws IOException {
 
 # 三、数据同步
 
+elasticsearch中的酒店数据来自于mysql数据库，因此mysql数据发生改变时，elasticsearch也必须跟着改变，这个就是elasticsearch与mysql之间的**数据同步**。
+
+![image-20220925232633244](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220925232633244.png)
+
+
+
+## 3.1、思路分析
+
+常见的数据同步方案有三种：
+
+- 同步调用
+- 异步通知
+- 监听binlog
+
+
+
+### 3.1.1、同步调用
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220925232922937.png" alt="image-20220925232922937" style="zoom:67%;" />
+
+基本步骤如下：
+
+- hotel-demo对外提供接口，用来修改elasticsearch中的数据
+- 酒店管理服务在完成数据库操作后，直接调用hotel-demo提供的接口
+
+
+
+### 3.1.2、异步通知
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220925233044360.png" alt="image-20220925233044360" style="zoom:67%;" />
+
+流程如下：
+
+- hotel-admin对mysql数据库数据完成增、删、改后，发送MQ消息
+- hotel-demo监听MQ，接收到消息后完成elasticsearch数据修改
+
+
+
+### 3.1.3、监听binlog
+
+![image-20220925233226954](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220925233226954.png)
+
+流程如下：
+
+- 给mysql开启binlog功能
+- mysql完成增、删、改操作都会记录在binlog中
+- hotel-demo基于canal监听binlog变化，实时更新elasticsearch中的内容
+
+
+
+### 3.1.4、总结
+
+方式一：同步调用
+
+- 优点：实现简单，粗暴
+- 缺点：业务耦合度高
+
+方式二：异步通知
+
+- 优点：低耦合，实现难度一般
+- 缺点：依赖mq的可靠性
+
+方式三：监听binlog
+
+- 优点：完全解除服务间耦合
+- 缺点：开启binlog增加数据库负担、实现复杂度高
+
+
+
+## 3.2、实现数据同步
+
+
+
+### 3.2.1、思路
+
+利用课前资料提供的hotel-admin项目作为酒店管理的微服务。当酒店数据发生增、删、改时，要求对elasticsearch中数据也要完成相同操作。
+
+步骤：
+
+- 导入课前资料提供的hotel-admin项目，启动并测试酒店数据的CRUD
+- 声明exchange、queue、RoutingKey
+- 在hotel-admin中的增、删、改业务中完成消息发送
+- 在hotel-demo中完成消息监听，并更新elasticsearch中数据
+- 启动并测试数据同步功能
+
+
+
+### 3.2.2、导入demo
+
+导入课前资料提供的hotel-admin项目。
+
+运行后，访问 http://localhost:8099。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220925234045274.png" alt="image-20220925234045274" style="zoom:67%;" />
+
+
+
+### 3.2.3、声明交换机、队列
+
+![image-20220925234520925](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220925234520925.png)
+
+
+
+#### 1、引入依赖
+
+在hotel-admin、hotel-demo中引入rabbitmq的依赖：
+
+```xml
+<!--amqp-->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-amqp</artifactId>
+</dependency>
+```
+
+配置yaml文件：
+
+```yaml
+spring:
+  rabbitmq:
+    host: 192.168.111.129
+    port: 5672
+    username: itcast
+    password: 123321
+    virtual-host: /
+```
+
+
+
+
+
+#### 2、声明队列交换机名称
+
+在hotel-admin和hotel-demo中的`cn.itcast.hotel.constatnts`包下新建一个类`MqConstants`：
+
+```java
+public class MqConstants {
+    /**
+     * 交换机
+     */
+    private final static String HOTEL_EXCHANGE = "hotel.topic";
+    /**
+     * 监听新增和修改的队列
+     */
+    private final static String HOTEL_INSERT_QUEUE = "hotel.insert.queue";
+    /**
+     * 监听删除的队列
+     */
+    private final static String HOTEL_DELETE_QUEUE = "hotel.delete.queue";
+    /**
+     * 新增或修改的RoutingKey
+     */
+    private final static String HOTEL_INSERT_KEY = "hotel.insert";
+    /**
+     * 删除的RoutingKey
+     */
+    private final static String HOTEL_DELETE_KEY = "hotel.delete";
+}
+```
+
+
+
+#### 3、声明队列交换机
+
+在hotel-demo中，定义配置类，声明队列、交换机：
+
+```java
+@Configuration
+public class MqConfig {
+    @Bean
+    public TopicExchange topicExchange(){
+        return new TopicExchange(MqConstants.HOTEL_EXCHANGE, true, false);
+    }
+
+    @Bean
+    public Queue insertQueue(){
+        return new Queue(MqConstants.HOTEL_INSERT_QUEUE, true);
+    }
+
+    @Bean
+    public Queue deleteQueue(){
+        return new Queue(MqConstants.HOTEL_DELETE_QUEUE, true);
+    }
+
+    @Bean
+    public Binding insertQueueBinding(){
+        return BindingBuilder.bind(insertQueue()).to(topicExchange()).with(MqConstants.HOTEL_INSERT_KEY);
+    }
+
+    @Bean
+    public Binding deleteQueueBinding(){
+        return BindingBuilder.bind(deleteQueue()).to(topicExchange()).with(MqConstants.HOTEL_DELETE_KEY);
+    }
+}
+```
+
+
+
+### 3.2.4、发送MQ消息
+
+在hotel-admin中的增、删、改业务中分别发送MQ消息：
+
+```java
+@PostMapping
+public void saveHotel(@RequestBody Hotel hotel){
+    hotelService.save(hotel);
+    rabbitTemplate.convertAndSend(MqConstants.HOTEL_EXCHANGE, MqConstants.HOTEL_INSERT_KEY, hotel.getId());
+}
+
+@PutMapping()
+public void updateById(@RequestBody Hotel hotel){
+    if (hotel.getId() == null) {
+        throw new InvalidParameterException("id不能为空");
+    }
+    hotelService.updateById(hotel);
+    rabbitTemplate.convertAndSend(MqConstants.HOTEL_EXCHANGE, MqConstants.HOTEL_INSERT_KEY, hotel.getId());
+}
+
+@DeleteMapping("/{id}")
+public void deleteById(@PathVariable("id") Long id) {
+    hotelService.removeById(id);
+    rabbitTemplate.convertAndSend(MqConstants.HOTEL_EXCHANGE, MqConstants.HOTEL_DELETE_KEY, id);
+}
+```
+
+
+
+### 3.2.5、接收MQ消息
+
+hotel-demo接收到MQ消息要做的事情包括：
+
+- 新增消息：根据传递的hotel的id查询hotel信息，然后新增一条数据到索引库
+- 删除消息：根据传递的hotel的id删除索引库中的一条数据
+
+
+
+1. 首先在hotel-demo的`cn.itcast.hotel.service`包下的`IHotelService`中新增新增、删除业务
+
+   ```java
+   void deleteById(Long id);
+   
+   void insertById(Long id);
+   ```
+
+2. 给hotel-demo中的`cn.itcast.hotel.service.impl`包下的HotelService中实现业务：
+
+   ```java
+   @Override
+   public void insertById(Long id) {
+       try {
+           // 0. 根据id查询酒店数据
+           Hotel hotel = getById(id);
+           HotelDoc hotelDoc = new HotelDoc(hotel);
+           // 1. 准备request
+           IndexRequest request = new IndexRequest("hotel").id(hotel.getId().toString());
+           // 2. 准备DSL
+           request.source(JSON.toJSONString(hotelDoc), XContentType.JSON);
+           // 3. 发送请求
+           client.index(request,RequestOptions.DEFAULT);
+       } catch (IOException e) {
+           e.printStackTrace();
+       }
+   }
+   
+   @Override
+   public void deleteById(Long id) {
+       try {
+           // 1. 准备request
+           DeleteRequest request = new DeleteRequest("hotel", id.toString());
+           // 2. 准备发送请求
+           client.delete(request, RequestOptions.DEFAULT);
+       } catch (IOException e) {
+           e.printStackTrace();
+       }
+   }
+   ```
+
+3. 编写监听器
+
+   在hotel-demo中的`cn.itcast.hotel.mq`包新增一个类：
+
+   ```java
+   @Component
+   public class HotelListener {
+   
+       @Autowired
+       private IHotelService hotelService;
+   
+       /**
+        * 监听酒店新增或修改的业务
+        * @param id 酒店id
+        */
+       @RabbitListener(queues = MqConstants.HOTEL_INSERT_QUEUE)
+       public void listenHotelInsertOrUpdate(Long id){
+           hotelService.insertById(id);
+       }
+   
+       /**
+        * 监听酒店删除的业务
+        * @param id 酒店id
+        */
+       @RabbitListener(queues = MqConstants.HOTEL_DELETE_QUEUE)
+       public void listenHotelDelete(Long id){
+           hotelService.deleteById(id);
+       }
+   }
+   ```
+
+
+
+# 四、集群
+
+单机的elasticsearch做数据存储，必然面临两个问题：海量数据存储问题、单点故障问题。
+
+- 海量数据存储问题：将索引库从逻辑上拆分为N个分片（shard），存储到多个节点
+- 单点故障问题：将分片数据在不同节点备份（replica ）
+
+**ES集群相关概念**：
+
+* 集群（cluster）：一组拥有共同的 cluster name 的 节点。
+* <font color="red">节点（node)</font>   ：集群中的一个 Elasticearch 实例
+* <font color="red">分片（shard）</font>：索引可以被拆分为不同的部分进行存储，称为分片。在集群环境下，一个索引的不同分片可以拆分到不同的节点中
+
+假设 IndexA 有2个分片，我们向 IndexA 中插入10条数据 (10个文档)，那么这10条数据会尽可能平均的分为5条存储在第一个分片，剩下的5条会存储在另一个分片中。
+
+解决问题：数据量太大，单点存储量有限的问题。
+
+
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220926113530087.png" alt="image-20220926113530087" style="zoom: 67%;" />
+
+此处，我们把数据分成3片：shard0、shard1、shard2
+
+* 主分片（Primary shard）：相对于副本分片的定义。
+
+* 副本分片（Replica shard）：每个主分片可以有一个或者多个副本，数据和主分片一样。
+
+数据备份可以保证高可用，但是每个分片备份一份，所需要的节点数量就会翻一倍，成本实在是太高了！
+
+为了在高可用和成本间寻求平衡，我们可以这样做：
+
+- 首先对数据分片，存储到不同节点
+- 然后对每个分片进行备份，放到对方节点，完成互相备份
+
+这样可以大大减少所需要的服务节点数量，如图，我们以3分片，每个分片备份一份为例。
+
+现在，每个分片都有1个备份，存储在3个节点：
+
+- node0：保存了分片0和1
+- node1：保存了分片0和2
+- node2：保存了分片1和2
+
+
+
+## 4.1、搭建ES集群
+
+我们会在单机上利用docker容器运行多个es实例来模拟es集群。不过生产环境推荐大家每一台服务节点仅部署一个es的实例。
+
+部署es集群可以直接使用docker-compose来完成，但这要求你的Linux虚拟机至少有**4G**的内存空间
+
+
+
+### 4.1.1、创建es集群
+
+首先编写一个docker-compose文件，内容如下：
+
+```sh
+version: '2.2'
+services:
+  es01:
+    image: elasticsearch:7.12.1
+    container_name: es01
+    environment:
+      - node.name=es01  # 节点名称
+      - cluster.name=es-docker-cluster  # 集群名称
+      - discovery.seed_hosts=es02,es03  # 集群中其他节点的IP地址
+      - cluster.initial_master_nodes=es01,es02,es03 # 初始化的主节点 
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - data01:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+    networks:
+      - elastic
+  es02:
+    image: elasticsearch:7.12.1
+    container_name: es02
+    environment:
+      - node.name=es02
+      - cluster.name=es-docker-cluster
+      - discovery.seed_hosts=es01,es03
+      - cluster.initial_master_nodes=es01,es02,es03
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - data02:/usr/share/elasticsearch/data
+    ports:
+      - 9201:9200
+    networks:
+      - elastic
+  es03:
+    image: elasticsearch:7.12.1
+    container_name: es03
+    environment:
+      - node.name=es03
+      - cluster.name=es-docker-cluster
+      - discovery.seed_hosts=es01,es02
+      - cluster.initial_master_nodes=es01,es02,es03
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - data03:/usr/share/elasticsearch/data
+    networks:
+      - elastic
+    ports:
+      - 9202:9200
+volumes:
+  data01:
+    driver: local
+  data02:
+    driver: local
+  data03:
+    driver: local
+
+networks:
+  elastic:
+    driver: bridge
+```
+
+
+
+es运行需要修改一些linux系统权限，修改`/etc/sysctl.conf`文件
+
+```sh
+vi /etc/sysctl.conf
+```
+
+添加下面的内容（限制一个进程可以拥有的VMA( 虚拟内存区域 ) 的数量）：
+
+```sh
+vm.max_map_count=262144
+```
+
+然后执行命令，让配置生效：
+
+```sh
+sysctl -p
+```
+
+
+
+通过docker-compose启动集群：
+
+```sh
+docker-compose up -d
+```
+
+
+
+### 4.1.2、集群状态监控
+
+kibana可以监控es集群，不过新版本需要依赖es的x-pack 功能，配置比较复杂。
+
+这里推荐使用cerebro来监控es集群状态，官方网址：https://github.com/lmenezes/cerebro
+
+解压后进入对应的bin目录，双击其中的cerebro.bat文件即可启动服务。
+
+访问http://localhost:9000 即可进入管理界面。
+
+输入elasticsearch的任意节点的地址和端口，点击connect即可。
+
+![image-20210109181106866](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20210109181106866.png)
+
+绿色的条，代表集群处于绿色（健康状态）。
+
+节点名称前有星标识，实心星代表当前节点为主节点，空心代表候选节点。
+
+
+
+### 4.1.3、创建索引库
+
+
+
+#### 1、利用kibana的DevTools创建索引库
+
+在DevTools中输入指令：
+
+```json
+PUT /itcast
+{
+  "settings": {
+    "number_of_shards": 3, // 分片数量
+    "number_of_replicas": 1 // 副本数量
+  },
+  "mappings": {
+    "properties": {
+      // mapping映射定义 ...
+    }
+  }
+}
+```
+
+
+
+#### 2、利用cerebro创建索引库
+
+利用cerebro还可以创建索引库：
+
+![image-20210602221409524](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20210602221409524.png)
+
+填写索引库信息：
+
+![image-20210602221520629](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20210602221520629.png)
+
+点击右下角的create按钮：
+
+![image-20210602221542745](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20210602221542745.png)
+
+
+
+### 4.1.4、查看分片效果
+
+回到首页，即可查看索引库分片效果：
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20210602221914483.png" alt="image-20210602221914483" style="zoom: 80%;" />
+
+
+
+## 4.2、集群脑裂问题
+
+
+
+### 4.2.1、集群职责划分
+
+elasticsearch中集群节点有不同的职责划分：
+
+![image-20220926154445575](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220926154445575.png)
+
+
+
+默认情况下，集群中的任何一个节点都同时具备上述四种角色。
+
+
+
+但是真实的集群一定要将集群职责分离：
+
+- master节点：对CPU要求高，但是内存要求低
+- data节点：对CPU和内存要求都高
+- coordinating节点：对网络带宽、CPU要求高
+
+职责分离可以让我们根据不同节点的需求分配不同的硬件去部署。而且避免业务之间的互相干扰。
+
+一个典型的es集群职责划分如图：
+
+![image-20220926155100449](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220926155100449.png)
+
+
+
+### 4.2.2、脑裂问题
+
+脑裂是因为集群中的节点失联导致的。
+
+例如一个集群中，主节点与其它节点失联：
+
+![image-20220926160608960](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220926160608960.png)
+
+此时，node2和node3认为node1宕机，就会重新选主：
+
+![image-20220926160717375](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220926160717375.png)
+
+当node3当选后，集群继续对外提供服务，node2和node3自成集群，node1自成集群，两个集群数据不同步，出现数据差异。
+
+网络恢复后，因为集群中有两个master节点，集群状态的不一致，出现脑裂的情况：
+
+![image-20220926160750329](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220926160750329.png)
+
+解决脑裂的方案是，要求选票超过 ( eligible节点数量 + 1 ）/ 2 才能当选为主，因此eligible节点数量最好是奇数。对应配置项是discovery.zen.minimum_master_nodes，在es7.0以后，已经成为默认配置，因此一般不会发生脑裂问题
+
+
+
+例如：3个节点形成的集群，选票必须超过 （3 + 1） / 2 ，也就是2票。node3得到node2和node3的选票，当选为主。node1只有自己1票，没有当选。集群中依然只有1个主节点，没有出现脑裂。
+
+
+
+### 4.2.3、总结
+
+master eligible节点的作用是什么？
+
+- 参与集群选主
+- 主节点可以管理集群状态、管理分片信息、处理创建和删除索引库的请求
+
+data节点的作用是什么？
+
+- 数据的CRUD
+
+coordinator节点的作用是什么？
+
+- 路由请求到其它节点
+- 合并查询到的结果，返回给用户
+
+
+
+## 4.3、集群分布式存储
+
+当新增文档时，应该保存到不同分片，保证数据均衡，那么coordinating node如何确定数据该存储到哪个分片呢？
+
+
+
+### 4.3.1、分片存储测试
+
+插入三条数据：
+
+id分别为：1、3、5
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20210723225006058.png" alt="image-20210723225006058" style="zoom:67%;" />
+
+match_all测试可以看到，三条数据分别在不同分片：
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20210723225342120.png" alt="image-20210723225342120" style="zoom: 80%;" />
+
+
+
+### 4.3.2、分片存储原理
+
+elasticsearch会通过hash算法来计算文档应该存储到哪个分片：
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220926161621490.png" alt="image-20220926161621490" style="zoom: 50%;" />
+
+说明：
+
+- _routing默认是文档的id
+- 算法与分片数量有关，因此索引库一旦创建，分片数量不能修改！
+
+
+
+新增文档的流程如下：
+
+![image-20220926161927486](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220926161927486.png)
+
+解读：
+
+- 1）新增一个id=1的文档
+- 2）对id做hash运算，假如得到的是2，则应该存储到shard-2
+- 3）shard-2的主分片在node3节点，将数据路由到node3
+- 4）保存文档
+- 5）同步给shard-2的副本replica-2，在node2节点
+- 6）返回结果给coordinating-node节点
+
+
+
+## 4.4、集群分布式查询
+
+elasticsearch的查询分成两个阶段：
+
+- scatter phase：分散阶段，coordinating node会把请求分发到每一个分片
+
+- gather phase：聚集阶段，coordinating node汇总data node的搜索结果，并处理为最终结果集返回给用户
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220926162636814.png" alt="image-20220926162636814" style="zoom:67%;" />
+
+
+
+**小结**
+
+分布式新增如何确定分片？
+
+- coordinating node根据id做hash运算，得到结果对shard数量取余，余数就是对应的分片
+
+分布式查询的两个阶段
+
+- 分散阶段： coordinating node将查询请求分发给不同分片
+
+- 收集阶段：将查询结果汇总到coordinating node ，整理并返回给用户
+
+
+
+## 4.5、集群故障转移
+
+集群的master节点会监控集群中的节点状态，如果发现有节点宕机，会立即将宕机节点的分片数据迁移到其它节点，确保数据安全，这个叫做故障转移。
+
+
+
+1. 例如一个集群结构如图：
+
+   ![image-20220926162907288](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220926162907288.png)
+
+   现在，node1是主节点，其它两个节点是从节点。
+
+2. 突然，node1发生了故障：
+
+   ![image-20220926162949399](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220926162949399.png)
+
+   
+
+   宕机后的第一件事，需要重新选主，例如选中了node2：
+
+   ![image-20220926163031790](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220926163031790.png)
+
+   
+
+   node2成为主节点后，会检测集群监控状态，发现：P-1没有副本分片，R-0只有副本分片。因此需要将node1上的数据迁移到node2、node3：
+
+   ![image-20220926163255808](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220926163255808.png)
+
+
+
+**小结**
+
+故障转移：
+
+- master宕机后，EligibleMaster选举为新的主节点。
+- master节点监控分片、节点状态，将故障节点上的分片转移到正常节点，确保数据安全。
