@@ -1369,3 +1369,169 @@ select e.name ename , e.age eage from emp e where e.age > 15 order by eage asc;
    ```
 
    
+
+## 2.6、DCL
+
+DCL英文全称是Data Control Language(数据控制语言)，用来管理数据库用户、控制数据库的访问权限。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220928110036481.png" alt="image-20220928110036481"  />
+
+
+
+### 2.6.1、管理用户
+
+数据库中用户信息和用户权限信息，都是存放在系统数据库mysql的user表中
+
+1. 查询用户
+
+   ```sql
+   select * from mysql.user;
+   ```
+
+   <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220928112409871.png" alt="image-20220928112409871"  />
+
+   其中 Host代表当前用户访问的主机，如果为localhost， 仅代表只能够在当前本机访问，是不可以远程访问的。
+
+   User代表的是访问该数据库的用户名。在MySQL中需要通过Host和User来唯一标识一个用户。
+
+2. 创建用户
+
+   ```sql
+   CREATE USER '用户名'@'主机名' IDENTIFIED BY '密码';
+   ```
+
+   主机名表示在指定的主机上，才能通过这个用户名访问mysql。
+
+3.  修改用户密码
+
+   ```sql
+   ALTER USER '用户名'@'主机名' IDENTIFIED WITH mysql_native_password BY '新密码';
+   ```
+
+4. 删除用户
+
+   ```sql
+   DROP USER '用户名'@'主机名' ;
+   ```
+
+**注意**：
+
+-  在MySQL中需要通过用户名@主机名的方式，来唯一标识一个用户。
+- 主机名可以使用 % 通配。
+-  这类SQL开发人员操作的比较少，主要是DBA（ Database Administrator 数据库管理员）使用。
+
+
+
+**案例**：
+
+1. 创建用户itcast，只能够在当前主机localhost访问，密码123456；
+
+   ```sql
+   create user 'itcast'@'localhost' identified by '123456';
+   ```
+
+2. 创建用户heima，可以在任意主机访问该数据库，密码123456；
+
+   ```sql
+   create user 'heima'@'%' identified by '123456';
+   ```
+
+3.  修改用户heima的访问密码为1234；
+
+   ```sql
+   alter user 'heima'@'%' identified with mysql_native_password by '1234';
+   ```
+
+4. 删除 itcast@localhost 用户
+
+   ```sql
+   drop user 'itcast'@'localhost';
+   ```
+
+
+
+### 2.6.2、权限控制
+
+MySQL中定义了很多种权限，但是常用的就以下几种：
+
+| 权限                | 说明               |
+| ------------------- | ------------------ |
+| ALL、ALL PRIVILEGES | 所有权限           |
+| SELECT              | 查询数据           |
+| INSERT              | 插入数据           |
+| UPDATE              | 修改数据           |
+| DELETE              | 删除数据           |
+| ALTER               | 修改表             |
+| DROP                | 删除数据库/表/视图 |
+| CREATE              | 创建数据库/表      |
+
+上述只是简单罗列了常见的几种权限描述，其他权限描述及含义，可以直接参考官方文档。
+
+
+
+1. 查询权限
+
+   ```sql
+   SHOW GRANTS FOR '用户名'@'主机名' ;
+   ```
+
+2. 授予权限
+
+   ```sql
+   GRANT 权限列表 ON 数据库名.表名 TO '用户名'@'主机名';
+   ```
+
+3.  撤销权限
+
+   ```sql
+   REVOKE 权限列表 ON 数据库名.表名 FROM '用户名'@'主机名';
+   ```
+
+**注意**：
+
+- 多个权限之间，使用逗号分隔
+- 授权时， 数据库名和表名可以使用 * 进行通配，代表所有。
+
+
+
+**案例**：
+
+1. 查询 'heima'@'%' 用户的权限
+
+   ```sql
+   show grants for 'heima'@'%';
+   ```
+
+2.  授予 'heima'@'%' 用户itcast数据库所有表的所有操作权限
+
+   ```sql
+   grant all on itcast.* to 'heima'@'%';
+   ```
+
+3. 撤销 'heima'@'%' 用户的itcast数据库的所有权限
+
+   ```sql
+   revoke all on itcast.* from 'heima'@'%';
+   ```
+
+
+
+### 2.6.3、总结
+
+1. 用户管理
+
+   ```sql
+   create user '用户名'@'主机名' identified by '密码';
+   alter user '用户名'@'主机名' identified with mysql_native_password by '密码';
+   drop user '用户名'@'主机名';
+   ```
+
+2. 权限控制
+
+   ```sql
+   show grants for '用户名'@'主机名';
+   grant 权限列表 on 数据库名.表名 to '用户名'@'主机名';
+   revoke 权限列表 on 数据库名.表名 from '用户名'@'主机名';
+   ```
+
+   
