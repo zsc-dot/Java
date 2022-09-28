@@ -339,7 +339,7 @@ MySQL的常见函数我们学习完了，那接下来，我们就来分析一下
 
 
 
-# 2、约束
+# 二、约束
 
 
 
@@ -436,3 +436,292 @@ insert into tb_user(name,age,gender) values ('Tom5',120,'男');
 **注意**：目前上述两张表，只是在逻辑上存在这样一层关系；在数据库层面，并未建立外键关联，所以是无法保证数据的一致性和完整性的。
 
 没有数据库外键关联的情况下，能够保证一致性和完整性呢？我们来测试一下。
+
+
+
+准备数据：
+
+```sql
+create table dept(
+	id int auto_increment comment 'ID' primary key,
+	name varchar(50) not null comment '部门名称'
+) comment '部门表';
+
+INSERT INTO dept (id, name) VALUES (1, '研发部'), (2, '市场部'),(3, '财务部'), (4, '销售部'), (5, '总经办');
+
+
+create table emp(
+    id int auto_increment comment 'ID' primary key,
+    name varchar(50) not null comment '姓名',
+    age int comment '年龄',
+    job varchar(20) comment '职位',
+    salary int comment '薪资',
+    entrydate date comment '入职时间',
+    managerid int comment '直属领导ID',
+    dept_id int comment '部门ID'
+) comment '员工表';
+
+INSERT INTO emp (id, name, age, job,salary, entrydate, managerid, dept_id) VALUES
+(1, '金庸', 66, '总裁',20000, '2000-01-01', null,5),(2, '张无忌', 20, '项目经理',12500, '2005-12-05', 1,1),
+(3, '杨逍', 33, '开发', 8400,'2000-11-03', 2,1),(4, '韦一笑', 48, '开发',11000, '2002-02-05', 2,1),
+(5, '常遇春', 43, '开发',10500, '2004-09-07', 3,1),(6, '小昭', 19, '程序员鼓励师',6600, '2004-10-12', 2,1);
+```
+
+
+
+接下来，我们可以做一个测试，删除id为1的部门信息。
+
+删除成功之后，部门表不存在id为1的部门，而在emp表中还有很多的员工，关联的为id为1的部门，此时就出现了数据的不完整性。 
+
+而要想解决这个问题就得通过数据库的外键约束。
+
+
+
+### 2.3.2、语法
+
+#### 1、添加外键
+
+```sql
+create table 表名(
+    字段名 数据类型...,
+    ...
+    [constraint] [外键名称] foreign key (外键字段名字) references 主表(主表列名)
+);
+
+alter table 表名 add constraint 外键名称 foreign key (外键字段名) references 主表(主表列名);
+```
+
+
+
+**案例**：
+
+为emp表的dept_id字段添加外键约束,关联dept表的主键id。
+
+```sql
+alter table emp add constraint fk_emp_dept_id foreign key (dept_id) references dept (id);
+```
+
+添加了外键约束之后，我们再到dept表(父表)删除id为1的记录，然后看一下会发生什么现象。 
+
+此时将会报错，不能删除或更新父表记录，因为存在外键约束。
+
+![image-20220928210659189](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220928210659189.png)
+
+
+
+#### 2、删除外键
+
+```sql
+alter table 表名 drop foreign key 外键名称;
+```
+
+
+
+**案例**：
+
+删除emp表的外键fk_emp_dept_id
+
+```sql
+alter table emp drop foreign key fk_emp_dept_id;
+```
+
+
+
+### 2.3.3、删除/更新行为
+
+添加了外键之后，再删除父表数据时产生的约束行为，我们就称为删除/更新行为。具体的删除/更新行为有以下几种：
+
+| 行为        | 说明                                                         |
+| ----------- | ------------------------------------------------------------ |
+| no action   | 当在父表中删除/更新对应记录时，首先检查该记录是否有对应外键，如果有则不允许删除/更新。 (与 RESTRICT 一致) 默认行为 |
+| restrict    | 当在父表中删除/更新对应记录时，首先检查该记录是否有对应外键，如果有则不允许删除/更新。 (与 NO ACTION 一致) 默认行为 |
+| cascade     | 当在父表中删除/更新对应记录时，首先检查该记录是否有对应外键，如果有，则也删除/更新外键在子表中的记录。 |
+| set null    | 当在父表中删除对应记录时，首先检查该记录是否有对应外键，如果有则设置子表中该外键值为null（这就要求该外键允许取null）。 |
+| set default | 父表有变更时，子表将外键列设置成一个默认的值 (Innodb不支持)  |
+
+
+
+语法：
+
+```sql
+alter table 表名 add constraint 外键名称 foreign key (外键字段) references 主表名(主表字段名) on update cascade on delete cascade;
+```
+
+
+
+**案例**：
+
+由于NO ACTION 是默认行为，我们前面语法演示的时候，已经测试过了，就不再演示了，这里我们再演示其他的两种行为：CASCADE、SET NULL。
+
+1. cascade
+
+   ```sql
+   alter table emp add constraint fk_emp_dept_id foreign key (dept_id) references dept(id) on update cascade on delete cascade;
+   ```
+
+   修改父表id为1的记录，将id修改为6
+
+   <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220928211722832.png" alt="image-20220928211722832" style="zoom:80%;" />
+
+   我们发现，原来在子表中dept_id值为1的记录，现在也变为6了，这就是cascade级联的效果。
+
+   **注意**：在一般的业务系统中，不会修改一张表的主键值。
+
+   删除父表id为6的记录，我们发现，父表的数据删除成功了，但是子表中关联的记录也被级联删除了。
+
+2. set null
+
+   在进行测试之前，我们先需要删除上面建立的外键 fk_emp_dept_id。然后再通过数据脚本，将emp、dept表的数据恢复了。
+
+   ```sql
+   alter table emp add constraint fk_emp_dept_id foreign key (dept) references dept(id) on update set null on delete set null;
+   ```
+
+   接下来，我们删除id为1的数据，看看会发生什么样的现象。
+
+   我们发现父表的记录是可以正常的删除的，父表的数据删除之后，再打开子表 emp，我们发现子表emp的dept_id字段，原来dept_id为1的数据，现在都被置为NULL了。
+
+   <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220928212045450.png" alt="image-20220928212045450" style="zoom:80%;" />
+
+   这就是SET NULL这种删除/更新行为的效果。
+
+
+
+## 2.4、总结
+
+1. 非空约束：not null
+2. 唯一约束：unique
+3. 主键约束：primary key (自增：auto_increment)
+4. 默认约束：default
+5. 检查约束：check
+6. 外键约束：foreign key
+
+
+
+# 三、多表查询
+
+
+
+## 3.1、多表关系
+
+项目开发中，在进行数据库表结构设计时，会根据业务需求及业务模块之间的关系，分析并设计表结构，由于业务之间相互关联，所以各个表结构之间也存在着各种联系，基本上分为三种：
+
+- 一对多 (多对一)
+- 多对多
+- 一对一
+
+
+
+### 3.1.1、一对多
+
+- 案例：部门 与 员工的关系
+- 关系：一个部门对应多个员工，一个员工对应一个部门
+- 实现：在多的一方建立外键，指向一的一方的主见
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220928212522914.png" alt="image-20220928212522914" style="zoom:80%;" />
+
+
+
+### 3.1.2、多对多
+
+- 案例：学生 与 课程的关系
+- 一个学生可以选修多门课程，一门课程也可以供多个学生选择
+- 实现: 建立第三张中间表，中间表至少包含两个外键，分别关联两方主键
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220928212637497.png" alt="image-20220928212637497" style="zoom:80%;" />
+
+
+
+对应的SQL脚本：
+
+```sql
+create table student(
+    id int auto_increment primary key comment '主键ID',
+    name varchar(10) comment '姓名',
+    no varchar(10) comment '学号'
+) comment '学生表';
+
+insert into student values (null, '黛绮丝', '2000100101'), (null, '谢逊', '2000100102'), (null, '殷天正', '2000100103'),(null, '韦一笑', '2000100104');
+
+
+create table course(
+    id int auto_increment primary key comment '主键ID',
+    name varchar(10) comment '课程名称'
+) comment '课程表';
+
+insert into course values (null, 'Java'), (null, 'PHP'), (null , 'MySQL') ,
+(null, 'Hadoop')
+
+
+-- 创建中间表
+create table course(
+    id int auto_increment comment '主键' primary key,
+    studentid int not null comment '学生id',
+    courseid int not null comment '课程id',
+    constraint fk_courseid foreign key courseid references course(id),
+    constraint fk_studentid foreign key studentid references student(id)
+)comment '学生课程中间表';
+
+insert into student_course values (null,1,1),(null,1,2),(null,1,3),(null,2,2),(null,2,3),(null,3,4);
+```
+
+
+
+### 3.1.3、一对一
+
+- 案例：用户 与 用户详情的关系
+- 关系：一对一关系，多用于单表拆分，将一张表的基础字段放在一张表中，其他详情字段放在另一张表中，以提升操作效率
+- 实现: 在任意一方加入外键，关联另外一方的主键，并且设置外键为唯一的(UNIQUE)
+
+对应的SQL脚本：
+
+```sql
+create table tb_user(
+    id int auto_increment primary key comment '主键ID',
+    name varchar(10) comment '姓名',
+    age int comment '年龄',
+    gender char(1) comment '1: 男 , 2: 女',
+    phone char(11) comment '手机号'
+) comment '用户基本信息表';
+
+create table tb_user_edu(
+    id int auto_increment primary key comment '主键ID',
+    degree varchar(20) comment '学历',
+    major varchar(50) comment '专业',
+    primaryschool varchar(50) comment '小学',
+    middleschool varchar(50) comment '中学',
+    university varchar(50) comment '大学',
+    userid int unique comment '用户ID',
+    constraint fk_userid foreign key (userid) references tb_user(id)
+) comment '用户教育信息表';
+
+insert into tb_user(id, name, age, gender, phone) values
+    (null,'黄渤',45,'1','18800001111'),
+    (null,'冰冰',35,'2','18800002222'),
+    (null,'码云',55,'1','18800008888'),
+    (null,'李彦宏',50,'1','18800009999');
+    
+insert into tb_user_edu(id, degree, major, primaryschool, middleschool, university, userid) values
+    (null,'本科','舞蹈','静安区第一小学','静安区第一中学','北京舞蹈学院',1),
+    (null,'硕士','表演','朝阳区第一小学','朝阳区第一中学','北京电影学院',2),
+    (null,'本科','英语','杭州市第一小学','杭州市第一中学','杭州师范大学',3),
+    (null,'本科','应用数学','阳泉第一小学','阳泉区第一中学','清华大学',4);
+```
+
+
+
+## 3.2、多表查询概述
+
+
+
+### 3.2.1、数据准备
+
+1. 删除之前 emp, dept表的测试数据
+
+2. 执行如下脚本，创建emp表与dept表并插入测试数据
+
+   ```sql
+   
+   ```
+
+   
