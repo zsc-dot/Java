@@ -716,12 +716,460 @@ insert into tb_user_edu(id, degree, major, primaryschool, middleschool, universi
 
 ### 3.2.1、数据准备
 
-1. 删除之前 emp, dept表的测试数据
+1. 删除之前 emp，dept表的测试数据
 
 2. 执行如下脚本，创建emp表与dept表并插入测试数据
 
    ```sql
+   -- 创建dept表，并插入数据
+   create table dept(
+	id int auto_increment comment 'ID' primary key,
+   	name varchar(50) not null comment '部门名称'
+   ) comment '部门表';
    
+   INSERT INTO dept (id, name) VALUES (1, '研发部'), (2, '市场部'),(3, '财务部'), (4, '销售部'), (5, '总经办'), (6, '人事部');
+   
+   
+   -- 创建emp表，并插入数据
+   create table emp(
+       id int auto_increment comment 'ID' primary key,
+       name varchar(50) not null comment '姓名',
+       age int comment '年龄',
+       job varchar(20) comment '职位',
+       salary int comment '薪资',
+       entrydate date comment '入职时间',
+       managerid int comment '直属领导ID',
+       dept_id int comment '部门ID'
+   ) comment '员工表';
+   
+   -- 添加外键
+   alter table emp add constraint fk_emp_dept_id foreign key (dept_id) references dept(id);
+   
+   INSERT INTO emp (id, name, age, job,salary, entrydate, managerid, dept_id) VALUES
+       (1, '金庸', 66, '总裁',20000, '2000-01-01', null,5),
+       (2, '张无忌', 20, '项目经理',12500, '2005-12-05', 1,1),
+       (3, '杨逍', 33, '开发', 8400,'2000-11-03', 2,1),
+       (4, '韦一笑', 48, '开发',11000, '2002-02-05', 2,1),
+       (5, '常遇春', 43, '开发',10500, '2004-09-07', 3,1),
+       (6, '小昭', 19, '程序员鼓励师',6600, '2004-10-12', 2,1),
+       (7, '灭绝', 60, '财务总监',8500, '2002-09-12', 1,3),
+       (8, '周芷若', 19, '会计',48000, '2006-06-02', 7,3),
+       (9, '丁敏君', 23, '出纳',5250, '2009-05-13', 7,3),
+       (10, '赵敏', 20, '市场部总监',12500, '2004-10-12', 1,2),
+       (11, '鹿杖客', 56, '职员',3750, '2006-10-03', 10,2),
+       (12, '鹤笔翁', 19, '职员',3750, '2007-05-09', 10,2),
+       (13, '方东白', 19, '职员',5500, '2009-02-12', 10,2),
+       (14, '张三丰', 88, '销售总监',14000, '2004-10-12', 1,4),
+       (15, '俞莲舟', 38, '销售',4600, '2004-10-12', 14,4),
+       (16, '宋远桥', 40, '销售',4600, '2004-10-12', 14,4),
+       (17, '陈友谅', 42, null,2000, '2011-10-12', 1,null);
+   ```
+   
+   dept表共6条记录，emp表共17条记录。
+
+
+
+### 3.2.2、概述
+
+多表查询就是指从多张表中查询数据。
+
+原来查询单表数据，执行的SQL形式为：
+
+```sql
+select * from emp;
+```
+
+那么我们要执行多表查询，就只需要使用逗号分隔多张表即可，如：
+
+```sql
+select * from emp, dept;
+```
+
+具体的执行结果如下：
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220929104357582.png" alt="image-20220929104357582"  />
+
+此时,我们看到查询结果中包含了大量的结果集，总共102条记录。
+
+而这其实就是员工表emp所有的记录(17) 与 部门表dept所有记录(6) 的所有组合情况，这种现象称之为笛卡尔积。
+
+
+
+笛卡尔积：笛卡尔乘积是指在数学中，两个集合A集合 和 B集合的所有组合情况。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220929104521000.png" alt="image-20220929104521000"  />
+
+而在多表查询中，我们是需要消除无效的笛卡尔积的，只保留两张表关联部分的数据。
+
+![image-20220929104540407](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220929104540407.png)
+
+在SQL语句中，如何来去除无效的笛卡尔积呢？我们可以给多表查询加上连接查询的条件即可。
+
+```sql
+select * from emp, dept where emp.dept_id = dept.id;
+```
+
+![image-20220929104718710](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220929104718710.png)
+
+而由于id为17的员工，没有dept_id字段值，所以在多表查询时，根据连接查询的条件并没有查询到。
+
+
+
+### 3.2.3、分类
+
+- 连接查询
+  - 内连接：相当于查询A、B交集部分数据
+  - 外连接：
+    - 左外连接：查询左表所有数据，以及两张表交集部分数据
+    - 右外连接：查询右表所有数据，以及两张表交集部分数据
+    - 自连接：当前表与自身的连接查询，自连接必须使用表别名
+- 子查询
+
+
+
+## 3.3、内连接
+
+![image-20220929110409085](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220929110409085.png)
+
+内连接查询的是两张表交集部分的数据。(也就是绿色部分的数据)。
+
+
+
+内连接的语法分为两种: 隐式内连接、显式内连接。先来学习一下具体的语法结构。
+
+1. 隐式内连接
+
+   ```sql
+   SELECT 字段列表 FROM 表1 , 表2 WHERE 条件 ... ;
    ```
 
+2. 显式内连接
+
+   ```sql
+   SELECT 字段列表 FROM 表1 [ INNER ] JOIN 表2 ON 连接条件 ... ;
+   ```
+
+
+
+**案例**：
+
+1. 查询每一个员工的姓名，及关联的部门的名称 (隐式内连接实现)
+
+   表结构：emp，dept
+
+   连接条件：emp.dept_id = dept.id
+
+   ```sql
+   select emp.name, dept.name from emp, dept where emp.dept_id = dept.id;
    
+   -- 为每一张表起别名,简化SQL编写
+   select e.name, d.name from emp e, dept d where e.dept_id = d.id;
+   ```
+
+2. 查询每一个员工的姓名，及关联的部门的名称 (显式内连接实现)
+
+   表结构：emp，dept
+
+   连接条件：emp.dept_id = dept.id
+
+   ```sql
+   select e.name, d.name from emp e inner join dept d on e.dept_id = d.id;
+   ```
+
+
+
+表的别名：
+
+- tablea as 别名1, tableb as 别名2;
+- tablea 别名1, tableb 别名2;
+
+
+
+**注意**：
+
+- 一旦为表起了别名，就不能再使用表名来指定对应的字段了，此时只能够使用别名来指定字段。
+
+
+
+## 3.4、外连接
+
+![image-20220929111724775](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220929111724775.png)
+
+外连接分为两种，分别是：左外连接 和 右外连接。具体的语法结构为：
+
+1. 左外连接
+
+   ```sql
+   SELECT 字段列表 FROM 表1 LEFT [ OUTER ] JOIN 表2 ON 条件 ... ;
+   ```
+
+   左外连接相当于查询表1(左表)的所有数据，当然也包含表1和表2交集部分的数据。
+
+2. 右外连接
+
+   ```sql
+   SELECT 字段列表 FROM 表1 RIGHT [ OUTER ] JOIN 表2 ON 条件 ... ;
+   ```
+
+   右外连接相当于查询表2(右表)的所有数据，当然也包含表1和表2交集部分的数据。
+
+
+
+**案例**：
+
+1.  查询emp表的所有数据，和对应的部门信息
+
+   由于需求中提到，要查询emp的所有数据，所以是不能内连接查询的，需要考虑使用外连接查询。
+
+   表结构：emp，dept
+
+   连接条件：emp.dept_id = dept.id
+
+   ```sql
+   select e.*,d.name from emp e left outer join dept d on e.dept_id = d.id;
+   
+   select e.*,d.name from emp e left join dept d on e.dept_id = d.id;
+   ```
+
+2. 查询dept表的所有数据，和对应的员工信息(右外连接)
+
+   由于需求中提到，要查询dept表的所有数据，所以是不能内连接查询的，需要考虑使用外连接查询。
+
+   表结构：emp，dept
+
+   连接条件：emp.dept_id = dept.id
+
+   ```sql
+   select d.*,e.* from emp e right outer join dept d on e.dept_id = d.id;
+   
+   select d.*,e.* from emp e right join dept d on e.dept_id = d.id;
+   ```
+
+
+
+**注意**：
+
+- 左外连接和右外连接是可以相互替换的，只需要调整在连接查询时SQL中，表结构的先后顺序就可以了。而我们在日常开发使用时，更偏向于左外连接。
+
+
+
+## 3.5、自连接
+
+
+
+### 3.5.1、自连接查询
+
+自连接查询，顾名思义，就是自己连接自己，也就是把一张表连接查询多次。我们先来学习一下自连接的查询语法：
+
+```sql
+SELECT 字段列表 FROM 表A 别名A JOIN 表A 别名B ON 条件 ... ;
+```
+
+而对于自连接查询，可以是内连接查询，也可以是外连接查询。
+
+
+
+**案例**：
+
+1. 查询员工 及其 所属领导的名字
+
+   表结构：emp
+
+   ```sql
+   select a.name, b.name from emp a, emp b where a.managerid = b.id;
+   ```
+
+2. 查询所有员工 emp 及其领导的名字 emp，如果员工没有领导，也需要查询出来
+
+   表结构：emp a，emp b
+
+   ```sql
+   select a.name, b.name from emp a left join emp b on a.managerid = b.id;
+   ```
+
+
+
+**注意**：
+
+- 在自连接查询中，必须要为表起别名，要不然我们不清楚所指定的条件、返回的字段，到底是哪一张表的字段。
+
+
+
+### 3.5.2、联合查询
+
+对于union查询，就是把多次查询的结果合并起来，形成一个新的查询结果集。
+
+```sql
+SELECT 字段列表 FROM 表A ...
+UNION [ ALL ]
+SELECT 字段列表 FROM 表B ....;
+```
+
+
+
+- 对于联合查询的多张表的列数必须保持一致，字段类型也需要保持一致。
+- union all 会将全部的数据直接合并在一起，union 会对合并之后的数据去重。
+
+
+
+**案例**：
+
+1. 将薪资低于 5000 的员工，和 年龄大于 50 岁的员工全部查询出来。
+
+   当前对于这个需求，我们可以直接使用多条件查询，使用逻辑运算符 or 连接即可。那这里呢，我们也可以通过union/union all来联合查询。
+
+   ```sql
+   select * from emp where salary < 5000
+   union all
+   select * from emp where age > 50
+   ```
+
+   union all查询出来的结果，仅仅进行简单的合并，并未去重。
+
+   union 联合查询，会对查询出来的结果进行去重处理。
+
+
+
+**注意**：
+
+- 如果多条查询语句查询出来的结果，字段数量不一致，在进行union/union all联合查询时，将会报错。
+
+
+
+## 3.6、子查询
+
+
+
+### 3.6.1、概述
+
+1. 概念
+
+   SQL语句中嵌套SELECT语句，称为嵌套查询，又称子查询。
+
+   ```sql
+   SELECT * FROM t1 WHERE column1 = ( SELECT column1 FROM t2 );
+   ```
+
+   子查询外部的语句可以是 INSERT / UPDATE / DELETE / SELECT 的任何一个。
+
+2. 分类
+
+   根据子查询结果不同,分为：
+
+   - 标量子查询 (子查询结果为单个值)
+   - 列子查询 (子查询结果为一列)
+   - 行子查询 (子查询结果为一行)
+   - 表子查询 (子查询结果为多行多列)
+
+   根据子查询位置，分为：
+
+   - WHERE之后
+   -  FROM之后
+   - SELECT之后
+
+
+
+### 3.6.2、标量子查询
+
+子查询返回的结果是单个值（数字、字符串、日期等），最简单的形式，这种子查询称为标量子查询。
+
+常用的操作符：= 、<>、>、>=、<、<= 
+
+
+
+**案例**：
+
+1. 查询 "销售部" 的所有员工信息
+
+   - 查询 "销售部" 部门ID
+
+     ```sql
+     select id from dept where name = '销售部';
+     ```
+
+   -  根据 "销售部" 部门ID, 查询员工信息
+
+     ```sql
+     select * from emp where dept_id = (select id from dept where name = '销售部');
+     ```
+
+2. 查询在 "方东白" 入职之后的员工信息
+
+   - 查询 方东白 的入职日期
+
+     ```sql
+     select entrydate from emp where name = '方东白';
+     ```
+
+   - 查询指定入职日期之后入职的员工信息
+
+     ```sql
+     select * from emp where entrydate > (select entrydate from emp where name = '方东白');
+     ```
+
+
+
+### 3.6.3、列子查询
+
+子查询返回的结果是一列（可以是多行），这种子查询称为列子查询。
+
+常用的操作符：in、not in、 any、some、 all
+
+
+
+| 操作符 | 描述                                   |
+| ------ | -------------------------------------- |
+| in     | 在指定的集合范围之内，多选一           |
+| not in | 不在指定的集合范围之内                 |
+| any    | 子查询返回列表中，有任意一个满足即可   |
+| some   | 与any等同，使用some的地方都可以使用any |
+| all    | 子查询返回列表的所有值都必须满足       |
+
+
+
+**案例**：
+
+1. 查询 "销售部" 和 "市场部" 的所有员工信息
+
+   - 查询 "销售部" 和 "市场部" 的部门ID
+
+     ```sql
+     select id from dept where name = '销售部' or name = '市场部';
+     ```
+
+   - 根据部门ID，查询员工信息
+
+     ```sql
+     select * from emp where dept_id in (select id from dept where name = '销售部' or name = '市场部');
+     ```
+
+2. 查询比 财务部 所有人工资都高的员工信息
+
+   - 查询所有 财务部 人员工资
+
+     ```sql
+     select id from dept where name = '财务部';
+     select salary from emp where dept_id = (select id from dept where name = '财务部');
+     ```
+
+   - 比 财务部 所有人工资都高的员工信息
+
+     ```sql
+     select * from emp where salary > all ( select salary from emp where dept_id = (select id from dept where name = '财务部') );
+     ```
+
+3. 查询比研发部其中任意一人工资高的员工信息
+
+   - 查询研发部所有人工资
+
+     ```sql
+     select salary from emp where dept_id = (select id from dept where name = '研发部');
+     ```
+
+   - 比研发部其中任意一人工资高的员工信息
+
+     ```sql
+     select * from emp where salary > any ( select salary from emp where dept_id = (select id from dept where name = '研发部') );
+     ```
+
+     
