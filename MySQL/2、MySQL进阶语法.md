@@ -723,13 +723,15 @@ insert into tb_user_edu(id, degree, major, primaryschool, middleschool, universi
    ```sql
    -- 创建dept表，并插入数据
    create table dept(
+   ```
+
 	id int auto_increment comment 'ID' primary key,
    	name varchar(50) not null comment '部门名称'
    ) comment '部门表';
-   
+
    INSERT INTO dept (id, name) VALUES (1, '研发部'), (2, '市场部'),(3, '财务部'), (4, '销售部'), (5, '总经办'), (6, '人事部');
-   
-   
+
+
    -- 创建emp表，并插入数据
    create table emp(
        id int auto_increment comment 'ID' primary key,
@@ -741,10 +743,10 @@ insert into tb_user_edu(id, degree, major, primaryschool, middleschool, universi
        managerid int comment '直属领导ID',
        dept_id int comment '部门ID'
    ) comment '员工表';
-   
+
    -- 添加外键
    alter table emp add constraint fk_emp_dept_id foreign key (dept_id) references dept(id);
-   
+
    INSERT INTO emp (id, name, age, job,salary, entrydate, managerid, dept_id) VALUES
        (1, '金庸', 66, '总裁',20000, '2000-01-01', null,5),
        (2, '张无忌', 20, '项目经理',12500, '2005-12-05', 1,1),
@@ -775,9 +777,9 @@ insert into tb_user_edu(id, degree, major, primaryschool, middleschool, universi
 
 原来查询单表数据，执行的SQL形式为：
 
-```sql
+​```sql
 select * from emp;
-```
+   ```
 
 那么我们要执行多表查询，就只需要使用逗号分隔多张表即可，如：
 
@@ -1172,4 +1174,480 @@ SELECT 字段列表 FROM 表B ....;
      select * from emp where salary > any ( select salary from emp where dept_id = (select id from dept where name = '研发部') );
      ```
 
-     
+
+
+
+### 3.6.4、行子查询
+
+子查询返回的结果是一行（可以是多列），这种子查询称为行子查询。
+
+常用的操作符：= 、<> 、in、not in
+
+
+
+**案例**：
+
+1. 查询与 "张无忌" 的薪资及直属领导相同的员工信息
+
+   - 查询 "张无忌" 的薪资及直属领导
+
+     ```sql
+     select salary, managerid from emp where name = '张无忌';
+     ```
+
+   - 查询与 "张无忌" 的薪资及直属领导相同的员工信息
+
+     ```sql
+     select * from emp where (salary, managerid) = (select salary, managerid from emp where name = '张无忌');
+     ```
+
+
+
+### 3.6.5、表子查询
+
+子查询返回的结果是多行多列，这种子查询称为表子查询。
+
+常用的操作符：in
+
+
+
+**案例**：
+
+1. 查询与 "鹿杖客" , "宋远桥" 的职位和薪资相同的员工信息
+
+   - 查询 "鹿杖客" , "宋远桥" 的职位和薪资
+
+     ```sql
+     select job, salary from emp where name = '鹿杖客' or name = '宋远桥';
+     ```
+
+   - 查询与 "鹿杖客"，"宋远桥" 的职位和薪资相同的员工信息
+
+     ```sql
+     select * from emp where (job, salary) in ( select job, salary from emp where name = '鹿杖客' or name = '宋远桥' );
+     ```
+
+2. 查询入职日期是 "2006-01-01" 之后的员工信息 , 及其部门信息
+
+   - 入职日期是 "2006-01-01" 之后的员工信息
+
+     ```sql
+     select * from emp where entrydate > '2006-01-01';
+     ```
+
+   - 查询这部分员工，对应的部门信息
+
+     ```sql
+     select e.*, d.* from (select * from emp where entrydate > '2006-01-01') e left join dept d on e.dept_id = d.id ;
+     ```
+
+
+
+## 3.7、多表查询案例
+
+数据环境准备：
+
+```sql
+create table salgrade(
+    grade int,
+    losal int,
+    hisal int
+) comment '薪资等级表';
+insert into salgrade values (1,0,3000);
+insert into salgrade values (2,3001,5000);
+insert into salgrade values (3,5001,8000);
+insert into salgrade values (4,8001,10000);
+insert into salgrade values (5,10001,15000);
+insert into salgrade values (6,15001,20000);
+insert into salgrade values (7,20001,25000);
+insert into salgrade values (8,25001,30000);
+```
+
+这里主要涉及到的表就三张：emp员工表、dept部门表、salgrade薪资等级表。
+
+
+
+1.  查询员工的姓名、年龄、职位、部门信息 （隐式内连接）
+
+   表：emp，dept
+
+   连接条件：emp.dept_id = dept.id
+
+   ```sql
+   select e.name , e.age , e.job , d.name from emp e, dept d where e.dept_id = d.id;
+   ```
+
+2. 查询年龄小于30岁的员工的姓名、年龄、职位、部门信息（显式内连接）
+
+   表：emp，dept
+
+   连接条件：emp.dept_id = dept.id
+
+   ```sql
+   select e.name, e.age, e.job, d.name from emp e inner join dept d on e.dept_id = d.id where e.age < 30;
+   ```
+
+3. 查询拥有员工的部门ID、部门名称
+
+   表：emp，dept
+
+   连接条件：emp.dept_id = dept.id
+
+   ```sql
+   select distinct d.id, d.name from emp e, dept d where e.dept_id = d.id;
+   ```
+
+4. 查询所有年龄大于40岁的员工，及其归属的部门名称；如果员工没有分配部门，也需要展示出来(外连接)
+
+   表：emp，dept
+
+   连接条件：emp.dept_id = dept.id
+
+   ```sql
+   select e.*, d.name from emp e left join dept d on e.dept_id = d.id where e.age > 40;
+   ```
+
+5. 查询所有员工的工资等级
+
+   表：emp，salgrade
+
+   连接条件：emp.salary >= salgrade.losal and emp.salary <= salgrade.hisal
+
+   ```sql
+   select e.*, s.grade, s.losal, s.hisal from emp e, salgrade s where e.salary >= s.losal and e.salary <= s.hisal;
+   
+   select e.*, s.grade, s.losal, s.hisal from emp e, salgrade s where e.salary between s.losal and e.salary;
+   ```
+
+6. 查询 "研发部" 所有员工的信息及工资等级
+
+   表：emp，salgrade，dept
+
+   连接条件：emp.salary between salgrade.losal and salgrade.hisal，emp.dept_id = dept.id
+
+   ```sql
+   select e.*, s.grade from emp e, dept d, salgrade s where e.dept_id = d.id and e.salary between s.losal and e.salary and d.name = '研发部';
+   ```
+
+7.  查询 "研发部" 员工的平均工资
+
+   表：emp，dept
+
+   连接条件：emp.dept_id = dept.id
+
+   ```sql
+   select avg(e.salary) from emp e, dept d where e.dept_id = d.id and d.name = '研发部';
+   ```
+
+8. 查询工资比 "灭绝" 高的员工信息。
+
+   - 查询 "灭绝" 的薪资
+
+     ```sql
+     select salary from emp where name = '灭绝';
+     ```
+
+   - 查询比她工资高的员工数据
+
+     ```sql
+     select * from emp where salary > (select salary from emp where name = '灭绝');
+     ```
+
+9. 查询比平均薪资高的员工信息
+
+   - 查询员工的平均薪资
+
+     ```sql
+     select avg(salary) from emp;
+     ```
+
+   - 查询比平均薪资高的员工信息
+
+     ```sql
+     select * from emp where salary > (select avg(salary) from emp);
+     ```
+
+10. 查询低于本部门平均工资的员工信息
+
+    - 查询指定部门平均薪资
+
+      ```sql
+      select avg(e1.salary) from emp e1 where e1.dept_id = 1;
+      select avg(e1.salary) from emp e1 where e1.dept_id = 2;
+      ```
+
+    - 查询低于本部门平均工资的员工信息
+
+      ```sql
+      select * from emp e2 where e2.salary < (select avg(e1.salary) from emp e1 where e1.dept_id = e2.dept_id);
+      ```
+
+11. 查询所有的部门信息，并统计部门的员工人数
+
+    ```sql
+    select d.id, d.name, (select count(*) from emp e where e.dept_id = d.id) '人数' from dept d;
+    ```
+
+12.  查询所有学生的选课情况，展示出学生名称，学号，课程名称
+
+    表：student，course，student_course
+
+    连接条件：student.id = student_course.studentid，course.id = student_course.courseid
+
+    ```sql
+    select s.name, s.no, c.name from student s, student_course sc, course c where s.id = sc.studentid and c.courseid = c.id ;
+    ```
+
+
+
+## 3.8、总结
+
+1. 多表关系
+
+   一对多：在多的一方设置外键，关联一的一方的主键
+
+   多对多：建立中间表，中间表包含两个外键，关联两张表的主键
+
+   一对一：用于表结构拆分，在其中任何一方设置外键，关联另一方的主键
+
+2. 多表查询
+
+   - 内连接：隐式、显示
+   - 外连接：左外、右外
+   - 自连接
+   - 子查询：标量子查询、列子查询、行子查询、表子查询
+
+
+
+# 四、事务
+
+
+
+## 4.1、事务简介
+
+事务是一组操作的集合，它是一个不可分割的工作单位，事务会把所有的操作作为一个整体一起向系统提交或撤销操作请求，即这些操作要么同时成功，要么同时失败。
+
+就比如：张三给李四转账1000块钱，张三银行账户的钱减少1000，而李四银行账户的钱要增加1000。 这一组操作就必须在一个事务的范围内，要么都成功，要么都失败。
+
+正常情况：转账这个操作，需要分为以下这么三步来完成，三步完成之后，张三减少1000，而李四增加1000，转账成功
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221002100052690.png" alt="image-20221002100052690" style="zoom:80%;" />
+
+异常情况：转账这个操作，也是分为以下这么三步来完成，在执行第三步是报错了，这样就导致张三减少1000块钱，而李四的金额没变，这样就造成了数据的不一致，就出现问题了。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221002100135731.png" alt="image-20221002100135731" style="zoom:80%;" />
+
+为了解决上述的问题，就需要通过数据的事务来完成，我们只需要在业务逻辑执行之前开启事务，执行完毕后提交事务。如果执行过程中报错，则回滚事务，把数据恢复到事务开始之前的状态。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221002100214566.png" alt="image-20221002100214566" style="zoom:80%;" />
+
+**注意**：默认MySQL的事务是自动提交的，也就是说，当执行完一条DML语句时，MySQL会立即隐式的提交事务。
+
+
+
+## 4.2、 事务操作
+
+数据准备：
+
+```sql
+drop table if exists account;
+create table account(
+    id int primary key AUTO_INCREMENT comment 'ID',
+    name varchar(10) comment '姓名',
+    money double(10,2) comment '余额'
+) comment '账户表';
+insert into account(name, money) VALUES ('张三', 2000), ('李四', 2000);
+```
+
+
+
+### 4.2.1、未控制事务
+
+1. 测试正常情况
+
+   ```sql
+   -- 1. 查询张三余额
+   select * from account where name = '张三';
+   -- 2. 张三的余额减少1000
+   update account set money = money - 1000 where name = '张三';
+   -- 3. 李四的余额增加1000
+   update account set money = money + 1000 where name = '李四';
+   ```
+
+   测试完毕之后检查数据的状态, 可以看到数据操作前后是一致的。
+
+   <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221002100421870.png" alt="image-20221002100421870" style="zoom:80%;" />
+
+2. 测试异常情况
+
+   ```sql
+   -- 1. 查询张三余额
+   select * from account where name = '张三';
+   -- 2. 张三的余额减少1000
+   update account set money = money - 1000 where name = '张三';
+   出错了....
+   -- 3. 李四的余额增加1000
+   update account set money = money + 1000 where name = '李四';
+   ```
+
+   我们把数据都恢复到2000，然后再次一次性执行上述的SQL语句(出错了.... 这句话不符合SQL语法，执行就会报错)，检查最终的数据情况，发现数据在操作前后不一致了。
+
+   <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221002100533031.png" alt="image-20221002100533031" style="zoom:80%;" />
+
+
+
+### 4.2.2、控制事务一
+
+1. 查看/设置事务提交方式
+
+   ```sql
+   SELECT @@autocommit;
+   SET @@autocommit = 0; —— 关闭自动提交事务，仅在同一会话中有效
+   ```
+
+2. 提交事务
+
+   ```sql
+   COMMIT;
+   ```
+
+3. 回滚事务
+
+   ```sql
+   ROLLBACK;
+   ```
+
+
+
+**注意**：上述的这种方式，我们是修改了事务的自动提交行为，把默认的自动提交修改为了手动提交，此时我们执行的DML语句都不会提交，需要手动的执行commit进行提交。
+
+
+
+### 4.2.3、控制事务二
+
+1. 开启事务
+
+   ```sql
+   START TRANSACTION 或 BEGIN;
+   ```
+
+2. 提交事务
+
+   ```sql
+   COMMIT;
+   ```
+
+3. 回滚事务
+
+   ```sql
+   ROLLBACK;
+   ```
+
+
+
+**转账案例**：
+
+```sql
+-- 开启事务
+start transaction
+-- 1. 查询张三余额
+select * from account where name = '张三';
+-- 2. 张三的余额减少1000
+update account set money = money - 1000 where name = '张三';
+-- 3. 李四的余额增加1000
+update account set money = money + 1000 where name = '李四';
+-- 如果正常执行完毕, 则提交事务
+commit;
+-- 如果执行过程中报错, 则回滚事务
+rollback;
+```
+
+
+
+## 4.3、事务四大特性
+
+- 原子性（Atomicity）：事务是不可分割的最小操作单元，要么全部成功，要么全部失败。
+- 一致性（Consistency）：事务完成时，必须使所有的数据都保持一致状态。
+- 隔离性（Isolation）：数据库系统提供的隔离机制，保证事务在不受外部并发操作影响的独立环境下运行。
+- 持久性（Durability）：事务一旦提交或回滚，它对数据库中的数据的改变就是永久的。
+
+上述就是事务的四大特性，简称ACID。
+
+
+
+## 4.4、并发事务问题
+
+1. 脏读：一个事务读到另外一个事务还没有提交的数据。
+
+   <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221002102059922.png" alt="image-20221002102059922" style="zoom:80%;" />
+
+   比如B读取到了A未提交的数据。
+
+2. 不可重复读：一个事务先后读取同一条记录，但两次读取的数据不同，称之为不可重复读。
+
+   ​	<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221002102151306.png" alt="image-20221002102151306" style="zoom:80%;" />
+
+   事务A两次读取同一条记录，但是读取到的数据却是不一样的。
+
+3. 幻读：一个事务按照条件查询数据时，没有对应的数据行，但是在插入数据时，又发现这行数据已经存在，再次查询还是没有，好像出现了 "幻影"。
+
+   ![image-20221002102252558](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221002102252558.png)
+
+
+
+## 4.5、事务隔离级别
+
+为了解决并发事务所引发的问题，在数据库中引入了事务隔离级别。主要有以下几种：
+
+| 隔离级别              | 脏读 | 不可重复读 | 幻读 |
+| --------------------- | ---- | ---------- | ---- |
+| Read uncommitted      | √    | √          | √    |
+| Read committed        | ×    | √          | √    |
+| Repeatable Read(默认) | ×    | ×          | √    |
+| Serializable          | ×    | ×          | ×    |
+
+
+
+1. 查看事务隔离级别
+
+   ```sql
+   SELECT @@TRANSACTION_ISOLATION;
+   ```
+
+2. 设置事务隔离级别
+
+   ```sql
+   SET [ SESSION | GLOBAL ] TRANSACTION ISOLATION LEVEL { READ UNCOMMITTED |READ COMMITTED | REPEATABLE READ | SERIALIZABLE }
+   ```
+
+   - session：当前会话生效
+   - global：全局生效
+
+**注意**：事务隔离级别越高，数据越安全，但是性能越低。
+
+
+
+## 4.6、总结
+
+1. 事务简介
+
+   事务是一组操作的集合，这组操作要么全部执行成功，要么全部执行失败。
+
+2. 事务操作
+
+   ```sql
+   START TRANSACTION; -- 开启事务
+   commit;rollback; -- 提交/回滚事务
+   ```
+
+3. 事务四大特性
+
+   原子性、一致性、隔离性、持久性
+
+4. 并发事务问题
+
+   脏读、不可重复读、幻读
+
+5. 事务隔离级别
+
+   Read uncommitted、Read committed、Repeatable Read(默认)、Serializable
