@@ -1537,7 +1537,7 @@ create unique index idx_user_phone_name on tb_user(phone,name);
 
 
 
-# 3、SQL优化
+# 三、SQL优化
 
 
 
