@@ -400,3 +400,741 @@ commit;
 **注意**：
 
 - 用户定义的变量无需对其进行声明或初始化，只不过获取到的值为NULL。
+
+
+
+**示例**：
+
+```sql
+-- set 赋值
+set @myname = 'itcast';
+set @myage := 10;
+set @mygender := '男', @myhobby := 'java';
+
+
+-- 使用
+select @myname, @myage, @mygender, @myhobby;
+
+
+-- select 赋值
+select @mycolor := 'red';
+select count(*) into @mycount from tb_user;
+
+select @mycolor, @mycount;
+
+select @abc; -- 没有定义，获取到的值为null
+```
+
+
+
+#### 3、局部变量
+
+**局部变量**是根据需要定义的在局部生效的变量，访问之前，需要DECLARE声明。可用作存储过程内的局部变量和输入参数，局部变量的范围是在其内声明的BEGIN ... END块。
+
+
+
+1. 声明
+
+   ```sql
+   DECLARE 变量名 变量类型 [DEFAULT ... ];
+   ```
+
+   变量类型就是数据库字段类型：INT、BIGINT、CHAR、VARCHAR、DATE、TIME等。
+
+2. 赋值
+
+   ```sql
+   SET 变量名 = 值 ;
+   SET 变量名 := 值 ;
+   SELECT 字段名 INTO 变量名 FROM 表名 ... ;
+   ```
+
+
+
+**示例**：
+
+```sql
+-- 声明、赋值
+create procedure p2()
+begin
+	declare stu_count int default 0;
+	-- set stu_count := 100;
+	select count(*) into stu_count from student;
+	select stu_count;
+end;
+
+call p2();
+```
+
+
+
+### 1.2.4、if
+
+if 用于做条件判断，具体的语法结构为：
+
+```sql
+if 条件1 then
+	......
+elseif 条件2 then  -- 可选
+	......
+else  -- 可选
+	......
+end if;
+```
+
+在if条件判断的结构中，ELSE IF 结构可以有多个，也可以没有。ELSE结构可以有，也可以没有。
+
+
+
+**案例**：
+
+根据定义的分数score变量，判定当前分数对应的分数等级。
+
+- score >= 85分，等级为优秀。
+- score >= 60分 且 score < 85分，等级为及格。
+- score < 60分，等级为不及格。
+
+```sql
+create procedure p3()
+begin
+	declare score int default 58;
+	declare result varchar(10);
+	
+	if score >= 85 then
+		set result := '优秀';
+	elseif score >= 60 then
+		set result := '及格';
+	else
+		set result := '不及格';
+	end if;
+	select result;
+end;
+
+call p3();
+```
+
+
+
+上述的需求我们虽然已经实现了，但是也存在一些问题，比如：score分数我们是在存储过程中定义死的，而且最终计算出来的分数等级，我们也仅仅是最终查询展示出来而已。
+
+那么我们能不能，把score分数动态的传递进来，计算出来的分数等级是否可以作为返回值返回呢？
+
+答案是肯定的，我们可以通过接下来所讲解的**参数**来解决上述的问题。
+
+
+
+### 1.2.5、参数
+
+参数的类型，主要分为以下三种：IN、OUT、INOUT。 具体的含义如下：
+
+| 类型  | 含义                                         | 备注 |
+| ----- | -------------------------------------------- | ---- |
+| in    | 该类参数作为输入，也就是需要调用时传入值     | 默认 |
+| out   | 该类参数作为输出，也就是该参数可以作为返回值 |      |
+| inout | 既可以作为输入参数，也可以作为输出参数       |      |
+
+
+
+用法为：
+
+```sql
+create procedure 存储过程名称([in/out/inout 参数名 参数类型])
+begin
+	-- SQL语句
+end;
+```
+
+
+
+**案例一**：
+
+根据传入参数score，判定当前分数对应的分数等级，并返回。
+
+- score >= 85分，等级为优秀。
+- score >= 60分 且 score < 85分，等级为及格。
+- score < 60分，等级为不及格。
+
+```sql
+create procedure p4(in score int, out result varchar(10))
+begin
+	if score >= 85 then
+		set result := '优秀';
+	elseif score >= 60 then
+		set result := '及格';
+	else
+		set result := '不及格';
+	end if;
+end;
+
+-- 定义用户变量 @result来接收返回的数据, 用户变量可以不用声明
+call p4(68, @result);
+
+select @result;
+```
+
+
+
+**案例二**：
+
+将传入的200分制的分数，进行换算，换算成百分制，然后返回。
+
+```sql
+create procedure p5(inout score double)
+begin
+	set score := score * 0.5;
+end;
+
+set @score := 78;
+call p5(@score);
+select @score;
+```
+
+
+
+### 1.2.6、case
+
+case结构及作用，和我们在基础篇中所讲解的流程控制函数很类似。有两种语法格式：
+
+语法1：
+
+```sql
+-- 含义： 当case_value的值为 when_value1时，执行statement_list1，当值为 when_value2时，执行statement_list2，否则就执行 statement_list
+case case_value
+	when when_value1 then statement_list1
+	[ WHEN when_value2 THEN statement_list2]
+	......
+	[else statement_list]
+end case;
+```
+
+语法2：
+
+```sql
+-- 含义：当条件search_condition1成立时，执行statement_list1，当条件search_condition2成立时，执行statement_list2，否则就执行 statement_list
+case
+	when search_condition1 then statement_list1
+	[WHEN search_condition2 THEN statement_list2]
+	......
+	[else statement_list]
+end case;
+```
+
+
+
+**案例**：
+
+根据传入的月份，判定月份所属的季节（要求采用case结构）。
+
+- 1-3月份，为第一季度
+- 4-6月份，为第二季度
+- 7-9月份，为第三季度
+- 10-12月份，为第四季度
+
+```sql
+create procedure p6(in month int)
+begin
+	declare result varchar(10);
+	case 
+		when month >= 1 and month <= 3 then
+			set result := '第一季度';
+		when month >= 4 and month <= 6 then
+			set result := '第二季度';
+		when month >= 7 and month <= 9 then
+			set result := '第三季度';
+		when month >= 10 and month <= 12 then
+			set result := '第四季度';
+		else
+			set result := '非法参数';
+	end case;
+	select concat('输入的月份为：', month, '所属的季度为：', result);
+end;
+
+call p6(4);
+```
+
+
+
+### 1.2.7、while
+
+while 循环是有条件的循环控制语句。满足条件后，再执行循环体中的SQL语句。具体语法为：
+
+```sql
+-- 先判定条件，如果条件为true，则执行逻辑，否则，不执行逻辑
+while 条件 do
+	SQL逻辑
+end while;
+```
+
+
+
+**案例**：
+
+计算从1累加到n的值，n为传入的参数值。
+
+```sql
+create procedure p7(in n int)
+begin
+	declare total int default 0;
+	while n > 0 do
+		set total := total + n;
+		set n := n -1;
+	end while;
+	select total;
+end;
+
+call p7(100);
+```
+
+
+
+### 1.2.8、repeat
+
+repeat是有条件的循环控制语句，当满足until声明的条件的时候，则退出循环。具体语法为：
+
+```sql
+-- 先执行一次逻辑，然后判定until条件是否满足，如果满足，则退出。如果不满足，则继续下一次循环
+repeat
+	SQL逻辑
+	until 条件
+end repeat;
+```
+
+
+
+**案例**：
+
+计算从1累加到n的值，n为传入的参数值。(使用repeat实现)
+
+```sql
+create procedure p8(in n int)
+begin
+	declare total int default 0;
+	repeat
+		set total := total + n;
+		set n := n-1;
+	until n <= 0
+	end repeat;
+	select total;
+end;
+
+call p8(100);
+```
+
+
+
+### 1.2.9、loop
+
+LOOP 实现简单的循环，如果不在SQL逻辑中增加退出循环的条件，可以用其来实现简单的死循环。
+
+LOOP可以配合一下两个语句使用：
+
+- LEAVE：配合循环使用，退出循环。
+- ITERATE：必须用在循环中，作用是跳过当前循环剩下的语句，直接进入下一次循环。
+
+```sql
+[begin_label:] loop
+	SQL逻辑
+end loop [end_label];
+
+leave label; -- 退出指定标记的循环体
+iterate label; -- 直接进入下一次循环
+```
+
+上述语法中出现的 begin_label，end_label，label 指的都是我们所自定义的标记。
+
+
+
+**案例一**：
+
+计算从1累加到n的值，n为传入的参数值。
+
+```sql
+create procedure p9(in n int)
+begin
+	declare total int default 0;
+	sum:loop
+		if n <= 0 then
+			leave sum;
+		end if;
+		set total := total + n;
+		set n := n - 1;
+	end loop sum;
+	select total;
+end;
+
+call p9(10);
+```
+
+
+
+**案例二**：
+
+计算从1到n之间的偶数累加的值，n为传入的参数值。
+
+```sql
+create procedure p10(in n int)
+begin
+	declare total int default 0;
+	sum:loop
+		if n <= 0 then
+			leave sum;
+		end if;
+		if n%2 != 0 then
+			set n := n - 1;
+			iterate sum;
+		end if;
+		set total := total + n;
+		set n := n - 1;
+	end loop sum;
+	select total;
+end;
+
+call p10(10);
+```
+
+
+
+### 1.2.10、游标
+
+游标（CURSOR）是用来存储查询结果集的数据类型，在存储过程和函数中可以使用游标对结果集进行循环的处理。游标的使用包括游标的声明、OPEN、FETCH 和 CLOSE，其语法分别如下：
+
+```sql
+-- 声明游标
+declare 游标名称 cursor for 查询语句;
+-- 打开游标
+open 游标名称;
+-- 获取游标记录
+fetch 游标名称 into 变量[, 变量];
+-- 关闭游标
+close 游标名称;
+```
+
+
+
+**案例**：
+
+根据传入的参数uage，来查询用户表tb_user中，所有的用户年龄小于等于uage的用户姓名（name）和专业（profession），并将用户的姓名和专业插入到所创建的一张新表 (id, name, profession) 中。
+
+```sql
+-- 逻辑:
+-- A. 声明游标, 存储查询结果集
+-- B. 准备: 创建表结构
+-- C. 开启游标
+-- D. 获取游标中的记录
+-- E. 插入数据到新表中
+-- F. 关闭游标
+create procedure p11(in uage int)
+begin
+	-- 定义变量要在定义游标之前
+	declare uname varchar(100);
+	declare upro varchar(100);
+	declare u_cursor cursor for select name, profession from tb_user where age <= uage;
+	
+	drop table if exists tb_user_pro;
+	create table if not exists tb_user_pro(
+		id int primary key auto_increment,
+		name varchar(100),
+		profession varchar(100)
+	);
+	
+	open u_cursor;
+	while true do
+		fetch u_cursor into uname, upro;
+		insert into tb_user_pro values (null, uname, upro);
+	end while;
+	close u_cursor;
+end;
+
+call p11(40);
+```
+
+
+
+上述存储过程在调用的过程中会报错，因为上面的while循环中并没有退出条件。当游标的数据集获取完毕之后，再次获取数据就会报错，从而终止了程序的执行。
+
+但是此时，tb_user_pro表结构及其数据都已经插入成功了，我们可以直接刷新表结构，检查表结构中的数据。
+
+功能虽然实现了，但是逻辑并不完善，而且程序执行完毕，获取不到数据，数据库还报错。接下来，我们就需要来完成这个存储过程，并且解决这个问题。
+
+要想解决这个问题，就需要通过MySQL中提供的**条件处理程序 Handler**来解决。
+
+
+
+### 1.2.11、条件处理程序
+
+条件处理程序（Handler）可以用来定义在流程控制结构执行过程中遇到问题时相应的处理步骤。具体语法为：
+
+```sql
+declare handler_action handler for condition_value [, condition_value]... statement;
+
+handler_action的取值：
+CONTINUE: 继续执行当前程序
+EXIT: 终止执行当前程序
+
+condition_value 的取值：
+SQLSTATE sqlstate_value: 状态码，如 02000
+SQLWARNING: 所有以01开头的SQLSTATE代码的简写
+NOT FOUND: 所有以02开头的SQLSTATE代码的简写
+SQLEXCEPTION: 所有没有被SQLWARNING 或 NOT FOUND捕获的SQLSTATE代码的简写
+```
+
+
+
+**案例**：
+
+我们继续来完成在上一小节提出的需求，并解决其中的问题。
+
+根据传入的参数uage，来查询用户表tb_user中，所有的用户年龄小于等于uage的用户姓名（name）和专业（profession），并将用户的姓名和专业插入到所创建的一张新表(id, name, profession)中。
+
+1.  通过SQLSTATE指定具体的状态码
+
+   ```sql
+   create procedure p11(in uage int)
+   begin
+   	declare uname varchar(100);
+   	declare upro varchar(100);
+   	declare u_cursor cursor for select name, profession from tb_user where age <= uage;
+   	-- 声明条件处理程序：当SQL语句执行抛出的状态码为02000时，将关闭游标u_cursor，并退出
+   	declare exit handler for SQLSTATE '02000' close u_cursor;
+   	
+   	drop table if exists tb_user_pro;
+   	create table if not exists tb_user_pro(
+   		id int primary key auto_increment,
+   		name varchar(100),
+   		profession varchar(100)
+   	);
+   	
+   	open u_cursor;
+   	while true do
+   		fetch u_cursor into uname, upro;
+   		insert into tb_user_pro values (null, uname, upro);
+   	end while;
+   	close u_cursor;
+   end;
+   
+   call p11(30);
+   ```
+
+2. 通过SQLSTATE的代码简写方式 NOT FOUND
+
+   02 开头的状态码，代码简写为 NOT FOUND
+
+   ```sql
+   create procedure p11(in uage int)
+   begin
+   	declare uname varchar(100);
+   	declare upro varchar(100);
+   	declare u_cursor cursor for select name, profession from tb_user where age <= uage;
+   	declare exit handler for not found close u_cursor;
+   	
+   	drop table if exists tb_user_pro;
+   	create table if not exists tb_user_pro(
+   		id int primary key auto_increment,
+   		name varchar(100),
+   		profession varchar(100)
+   	);
+   	
+   	open u_cursor;
+   	while true do
+   		fetch u_cursor into uname, upro;
+   		insert into tb_user_pro values (null, uname, upro);
+   	end while;
+   	close u_cursor;
+   end;
+   
+   call p11(30);
+   ```
+
+   具体的错误状态码，可以参考官方文档：
+
+   https://dev.mysql.com/doc/refman/8.0/en/declare-handler.html 
+
+   https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html
+
+
+
+## 1.3、存储函数
+
+存储函数是有返回值的存储过程，存储函数的参数只能是IN类型的。具体语法如下：
+
+```sql
+create function 存储函数名称 ([参数列表])
+returns type [characteristic ...]
+begin
+	SQL语句
+	return ...;
+end;
+```
+
+characteristic说明：
+
+- DETERMINISTIC：相同的输入参数总是产生相同的结果
+- NO SQL：不包含 SQL 语句
+- READS SQL DATA：包含读取数据的语句，但不包含写入数据的语句
+
+
+
+**案例**：
+
+计算从1累加到n的值，n为传入的参数值。
+
+```sql
+create function fun1(n int)
+returns int DETERMINISTIC
+begin
+	declare total int default 0;
+	while n > 0 do
+		set total := total + n;
+		set n := n - 1;
+	end while;
+	return total;
+end;
+
+select fun1(100);
+```
+
+
+
+存储函数一般用的比较少，因为存储函数能做的事，存储过程也可以做
+
+
+
+## 1.4、触发器
+
+
+
+### 1.4.1、介绍
+
+触发器是与表有关的数据库对象，指在insert/update/delete之前(BEFORE)或之后(AFTER)，触发并执行触发器中定义的SQL语句集合。触发器的这种特性可以协助应用在数据库端确保数据的完整性，日志记录，数据校验等操作。
+使用别名OLD和NEW来引用触发器中发生变化的记录内容，这与其他的数据库是相似的。现在触发器还只支持行级触发，不支持语句级触发。
+
+| 触发器类型      | NEW 和 OLD                                             |
+| --------------- | ------------------------------------------------------ |
+| INSERT 型触发器 | NEW 表示将要或者已经新增的数据                         |
+| UPDATE 型触发器 | OLD 表示修改之前的数据，NEW 表示将要或已经修改后的数据 |
+| DELETE 型触发器 | OLD 表示将要或者已经删除的数据                         |
+
+
+
+### 1.4.2、语法
+
+1. 创建
+
+   ```sql
+   create trigger 触发器名称
+   before/after insert/update/delete
+   on 表名 for each row -- 行级触发器
+   begin
+   	SQL语句;
+   end;
+   ```
+
+2. 查看
+
+   ```sql
+   show triggers;
+   ```
+
+3. 删除
+
+   ```sql
+   drop trigger 数据库名.触发器名称;  -- 如果没有指定数据库名，默认为当前数据库
+   ```
+
+
+
+### 1.4.3、案例
+
+通过触发器记录 tb_user 表的数据变更日志，将变更日志插入到日志表user_logs中，包含增加，修改，删除
+
+表结构准备：
+
+```sql
+-- 准备工作 : 日志表 user_logs
+create table user_logs(
+    id int(11) not null auto_increment,
+    operation varchar(20) not null comment '操作类型, insert/update/delete',
+    operate_time datetime not null comment '操作时间',
+    operate_id int(11) not null comment '操作的ID',
+    operate_params varchar(500) comment '操作参数',
+    primary key(`id`)
+)engine=innodb default charset=utf8;
+```
+
+
+
+1. 插入数据触发器
+
+   ```sql
+   create trigger tb_user_insert_trigger
+   	after insert on tb_user for each row
+   begin
+   	insert into user_logs (id, operation, operate_time, operate_id, operate_params) values
+   	(null, 'insert', now(), new.id, concat('插入的数据内容为：id=', new.id, 'name=', new.name, 'phone=', new.phone, 'email=',new.email, 'profession=', new.profession));
+   end;
+   ```
+
+   测试：
+
+   ```sql
+   -- 查看
+   show triggers;
+   -- 插入数据到tb_user
+   insert into tb_user(id, name, phone, email, profession, age, gender, status,createtime) VALUES (26,'三子','18809091212','erhuangzi@163.com','软件工程',23,'1','1',now());
+   ```
+
+2. 修改触发器
+
+   ```sql
+   create trigger tb_user_updaye_trigger
+   	after update on tb_user for each row
+   begin
+   	insert into user_logs (id, operation, operate_time, operate_id, operate_params) values
+   	(null, 'update', now(), new.id, concat(
+   	'更新之前的数据：id=', old.id, 'name=', old.name, 'phone=', old.phone, 'email=', old.email, 'profession=', old.profession,
+   	' | 更新之后的数据：id=', new.id, 'name=', new.name, 'phone=', new.phone, 'email=', new.email, 'profession=', new.profession
+   	));
+   end;
+   ```
+
+   测试：
+
+   ```sql
+   update tb_user set profession = '会计' where id = 23;
+   update tb_user set profession = '会计' where id <= 5;
+   ```
+
+3. 删除数据触发器
+
+   ```sql
+   create trigger tb_user_delete_trigger
+   	after delete on tb_user for each row
+   begin
+   	insert into user_logs (id, operation, operate_time, operate_id, operate_params) values
+   	(null, 'delete', now(), old.id, concat('删除的数据内容为：id=', old.id, 'name=', old.name, 'phone=', old.phone, 'email=', old.email, 'profession=', old.profession));
+   end;
+   ```
+
+   测试：
+
+   ```sql
+   delete from tb_user where id = 26;
+   ```
+
+
+
+## 1.5、总结
+
+1. 视图 (VIEW)
+   - 虚拟存在的表，不保存查询结果，只保存查询的SQL逻辑
+   - 简单、安全、数据独立
+2. 存储过程 (PROCEDURE)
+   - 事先定义并存储在数据库中的一段SQL语句的集合
+   - 减少网络交互，提高性能，封装重用
+   - 变量、if、case、参数(in/out/inout)、while、repeat、loop、cursor、handler
+3. 存储函数 (FUNCTION)
+   - 存储函数是有返回值的存储过程，参数类型只能为in类型
+   - 存储函数可以被存储过程替代
+4. 触发器 (TRIGGER)
+   - 可以在表数据进行insert、update、delete之前或之后触发
+   - 保证数据完整性、日志记录、数据校验
