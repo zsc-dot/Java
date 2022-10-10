@@ -1165,3 +1165,239 @@ MySQL中的锁，按照锁的粒度分，分为以下三类：
 
 ### 2.2.1、介绍
 
+全局锁就是对整个数据库实例加锁，加锁后整个实例就处于只读状态，后续的DML的写语句，DDL语句，已经更新操作的事务提交语句都将被阻塞。
+
+其典型的使用场景是做全库的逻辑备份，对所有的表进行锁定，从而获取一致性视图，保证数据的完整性。
+
+
+
+为什么全库逻辑备份，就需要加全就锁呢？
+
+1. 我们一起先来分析一下不加全局锁，可能存在的问题。
+
+   假设在数据库中存在这样三张表：tb_stock 库存表，tb_order 订单表，tb_orderlog 订单日志表。
+
+   ![image-20221010093520999](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010093520999.png)
+
+   - 在进行数据备份时，先备份了tb_stock库存表
+   - 然后接下来，在业务系统中，执行了下单操作，扣减库存，生成订单（更新tb_stock表，插入tb_order表）
+   - 然后再执行备份 tb_order表的逻辑
+   - 业务中执行插入订单日志操作
+   - 最后，又备份了tb_orderlog表
+
+   此时备份出来的数据，是存在问题的。因为备份出来的数据，tb_stock表与tb_order表的数据不一致 (有最新操作的订单信息,但是库存数没减)。
+
+   那如何来规避这种问题呢? 此时就可以借助于MySQL的全局锁来解决。
+
+2. 再来分析一下加了全局锁后的情况
+
+   ![image-20221010093701668](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010093701668.png)
+
+   对数据库进行进行逻辑备份之前，先对整个数据库加上全局锁，一旦加了全局锁之后，其他的DDL、DML全部都处于阻塞状态，但是可以执行DQL语句，也就是处于只读状态，而数据备份就是查询操作。那么数据在进行逻辑备份的过程中，数据库中的数据就是不会发生变化的，这样就保证了数据的一致性和完整性。
+
+
+
+### 2.2.2、语法
+
+1. 加全局锁
+
+   ```sql
+   flush tables with read lock;
+   ```
+
+2. 数据备份
+
+   不需要在数据库命令行中执行，在终端命令行中执行即可
+
+   ```sh
+   mysqldump -uroot -p1234 itcast > itcast.sql
+   ```
+
+   数据备份的相关指令, 在后面MySQL管理章节, 还会详细讲解。
+
+3. 释放锁
+
+   ```sql
+   unlock tables;
+   ```
+
+
+
+### 2.2.3、特点
+
+数据库中加全局锁，是一个比较重的操作，存在以下问题：
+
+- 如果在主库上备份，那么在备份期间都不能执行更新，业务基本上就得停摆
+- 如果在从库上备份，那么在备份期间从库不能执行主库同步过来的二进制日志（binlog），会导致主从延迟。
+
+
+
+在InnoDB引擎中，我们可以在备份时加上参数 --single-transaction 参数来完成不加锁的一致性数据备份。
+
+```sh
+mysqldump --single-transaction -uroot -p1234 itcast > itcast.sql
+```
+
+
+
+## 2.3、表级锁
+
+
+
+### 2.3.1、介绍
+
+表级锁，每次操作锁住整张表。锁定粒度大，发生锁冲突的概率最高，并发度最低。应用在MyISAM、InnoDB、BDB等存储引擎中。
+
+对于表级锁，主要分为以下三类：
+
+- 表锁
+- 元数据锁 (meta data lock，MDL)
+- 意向锁
+
+
+
+### 2.3.2、表锁
+
+对于表锁，分为两类：
+
+- 表共享读锁（read lock）
+- 表独占写锁（write lock）
+
+
+
+**语法**：
+
+- 加锁
+
+  ```sql
+  lock tables 表名1[表名2...] read/write;
+  ```
+
+- 释放锁
+
+  ```sql
+  unlock tables;
+  客户端断开连接也会释放锁
+  ```
+
+
+
+**特点**：
+
+1. 共享读锁
+
+   ![image-20221010102003251](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010102003251.png)
+
+   左侧为客户端一，对指定表加了读锁，不会影响右侧客户端二的读，但是会阻塞右侧客户端的写。
+
+2. 独占写锁
+
+   ![image-20221010102035725](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010102035725.png)
+
+   左侧为客户端一，对指定表加了写锁，会阻塞右侧客户端的读和写。
+
+
+
+> 结论：读锁不会阻塞其他客户端的读，但是会阻塞写。写锁既会阻塞其他客户端的读，又会阻塞其他客户端的写。
+
+
+
+### 2.3.3、元数据锁
+
+meta data lock，元数据锁，简写MDL。
+
+MDL加锁过程是系统自动控制，无需显式使用，在访问一张表的时候会自动加上。
+
+MDL锁主要作用是维护表元数据的数据一致性，在表上有活动事务的时候，不可以对元数据进行写入操作。**为了避免DML与DDL冲突，保证读写的正确性。**
+
+这里的元数据，大家可以简单理解为就是一张表的表结构。也就是说，某一张表涉及到未提交的事务时，是不能够修改这张表的表结构的。
+
+在MySQL5.5中引入了MDL，当对一张表进行增删改查的时候，加MDL读锁(共享)；当对表结构进行变更操作的时候，加MDL写锁(排他)。
+
+常见的SQL操作时，所添加的元数据锁：
+
+| 对应SQL                                        | 锁类型                                  | 说明                                             |
+| ---------------------------------------------- | --------------------------------------- | ------------------------------------------------ |
+| lock tables xxx read / write                   | SHARED_READ_ONLY / SHARED_NO_READ_WRITE |                                                  |
+| select 、select ... lock in share mode         | SHARED_READ (MDL共享锁)                 | 与SHARED_READ、SHARED_WRITE兼容，与EXCLUSIVE互斥 |
+| insert 、update、delete、select ... for update | SHARED_WRITE (MDL共享锁)                | 与SHARED_READ、SHARED_WRITE兼容，与EXCLUSIVE互斥 |
+| alter table ...                                | EXCLUSIVE (排他锁)                      | 与其他的MDL都互斥                                |
+
+
+
+**演示**：
+
+当执行select、insert、update、delete等语句时，添加的是元数据共享锁（SHARED_READ / SHARED_WRITE），之间是兼容的。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010105044413.png" alt="image-20221010105044413"  />
+
+
+
+当执行SELECT语句时，添加的是元数据共享锁（SHARED_READ），会阻塞元数据排他锁（EXCLUSIVE），之间是互斥的。
+
+![image-20221010105643119](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010105643119.png)
+
+
+
+我们可以通过下面的SQL，来查看数据库中的元数据锁的情况：
+
+```sql
+select object_type, object_schema, object_name, lock_type, lock_duration from performance_schema.metadata_locks;
+```
+
+
+
+### 2.3.4、意向锁
+
+#### 1、介绍
+
+为了避免DML在执行时，加的行锁与表锁的冲突，在InnoDB中引入了意向锁，使得表锁不用检查每行数据是否加锁，使用意向锁来减少表锁的检查。
+
+假如没有意向锁，客户端一对表加了行锁后，客户端二如何给表加表锁呢，来通过示意图简单分析一下：
+
+1. 首先客户端一，开启一个事务，然后执行DML操作，在执行DML语句时，会对涉及到的行加行锁
+
+   ![image-20221010110501515](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010110501515.png)
+
+2. 当客户端二，想对这张表加表锁时，会检查当前表是否有对应的行锁，如果没有，则添加表锁，此时就会从第一行数据，检查到最后一行数据，效率较低
+
+   ![image-20221010110545545](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010110545545.png)
+
+
+
+有了意向锁之后：
+
+1. 客户端一，在执行DML操作时，会对涉及的行加行锁，同时也会对该表加上意向锁
+
+   ![image-20221010110632671](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010110632671.png)
+
+2. 而其他客户端，在对这张表加表锁的时候，会根据该表上所加的意向锁来判定是否可以成功加表锁，而不用逐行判断行锁情况了
+
+   ![image-20221010110709273](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010110709273.png)
+
+#### 2、分类
+
+- 意向共享锁(IS)：由语句select ... lock in share mode添加 。与 表锁共享锁(read)兼容，与表锁排他锁(write)互斥。
+- 意向排他锁(IX)：由insert、update、delete、select...for update添加 。与表锁共享锁(read)及排他锁(write)都互斥，意向锁之间不会互斥。
+
+
+
+> 一旦事务提交了，意向共享锁、意向排他锁，都会自动释放。
+
+可以通过以下SQL，查看意向锁及行锁的加锁情况：
+
+```sql
+select object_schema, object_name, index_name, lock_type, lock_mode, lock_data from performance_schema.data_locks;
+```
+
+
+
+**演示**：
+
+1. 意向共享锁与表读锁是兼容的
+
+   ![image-20221010112727187](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010112727187.png)
+
+2. 意向排他锁和表读锁、写锁都互斥
+
+   ![image-20221010112929338](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010112929338.png)
