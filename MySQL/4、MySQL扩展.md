@@ -1429,3 +1429,138 @@ InnoDB的数据是基于索引组织的，行锁是通过对索引上的索引�
 
 
 ### 2.4.2、行锁
+
+#### 1、介绍
+
+InnoDB实现了以下两种类型的行锁：
+
+- 共享锁（S）：允许一个事务去读一行，阻止其他事务获得相同数据集的排它锁。
+- 排他锁（X）：允许获取排他锁的事务更新数据，阻止其他事务获得相同数据集的共享锁和排他锁。
+
+
+
+两种行锁的兼容情况如下：
+
+| 当前锁类型 \ 请求锁类型 | S（共享锁） | X（排他锁） |
+| ----------------------- | ----------- | ----------- |
+| S（共享锁）             | 兼容        | 冲突        |
+| X（排他锁）             | 冲突        | 冲突        |
+
+
+
+常见的SQL语句，在执行时，所加的行锁如下：
+
+| SQL                           | 行锁类型   | 说明                                     |
+| ----------------------------- | ---------- | ---------------------------------------- |
+| insert ...                    | 排他锁     | 自动加锁                                 |
+| update ...                    | 排他锁     | 自动加锁                                 |
+| delete ...                    | 排他锁     | 自动加锁                                 |
+| select ...                    | 不加任何锁 |                                          |
+| select ... lock in share mode | 共享锁     | 需要手动在SELECT之后加LOCK IN SHARE MODE |
+| select ... for update         | 排他锁     | 需要手动在SELECT之后加FOR UPDATE         |
+
+
+
+#### 2、演示
+
+默认情况下，InnoDB在 REPEATABLE READ事务隔离级别运行，InnoDB使用 next-key 锁进行搜索和索引扫描，以防止幻读。
+
+- 针对唯一索引进行检索时，对已存在的记录进行等值匹配时，将会自动优化为行锁。
+- InnoDB的行锁是针对于索引加的锁，不通过索引条件检索数据时，InnoDB将对表中的所有记录加锁，此时就会升级为表锁。
+
+
+
+可以通过以下SQL，查看意向锁及行锁的加锁情况：
+
+```sql
+select object_schema,object_name,index_name,lock_type,lock_mode,lock_data from performance_schema.data_locks;
+```
+
+
+
+数据准备：
+
+```sql
+CREATE TABLE `stu` (
+    `id` int NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    `name` varchar(255) DEFAULT NULL,
+    `age` int NOT NULL
+) ENGINE = InnoDB CHARACTER SET = utf8mb4;
+INSERT INTO `stu` VALUES (1, 'tom', 1);
+INSERT INTO `stu` VALUES (3, 'cat', 3);
+INSERT INTO `stu` VALUES (8, 'rose', 8);
+INSERT INTO `stu` VALUES (11, 'jetty', 11);
+INSERT INTO `stu` VALUES (19, 'lily', 19);
+INSERT INTO `stu` VALUES (25, 'luci', 25);
+```
+
+
+
+1. 普通的select语句，执行时，不会加锁。
+
+   ![image-20221010214252653](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010214252653.png)
+   
+2. select...lock in share mode，加共享锁，共享锁与共享锁之间兼容。
+
+   ![image-20221010215129653](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010215129653.png)
+
+3. 共享锁与排他锁之间互斥
+
+   ![image-20221010215237366](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010215237366.png)
+
+   客户端一获取的是id为1这行的共享锁，客户端二是可以获取id为3这行的排它锁的，因为不是同一行数据。 而如果客户端二想获取id为1这行的排他锁，会处于阻塞状态，因为共享锁与排他锁之间互斥。
+
+4. 排它锁与排他锁之间互斥
+
+   ![image-20221010215356138](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010215356138.png)
+
+   当客户端一，执行update语句，会为id为1的记录加排他锁； 客户端二，如果也执行update语句更新id为1的数据，也要为id为1的数据加排他锁，但是客户端二会处于阻塞状态，因为排他锁之间是互斥的。 直到客户端一，把事务提交了，才会把这一行的行锁释放，此时客户端二，解除阻塞。
+
+5. 无索引行锁升级为表锁
+
+   stu表中数据如下：
+
+   <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010215648792.png" alt="image-20221010215648792" style="zoom: 67%;" />
+
+   我们在两个客户端中执行如下操作：
+
+   ![image-20221010220034366](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010220034366.png)
+
+   在客户端一中，开启事务，并执行update语句，更新name为Lily的数据，也就是id为19的记录。
+
+   然后在客户端二中更新id为3的记录，却不能直接执行，会处于阻塞状态，为什么呢？
+
+   原因就是因为此时，客户端一，根据name字段进行更新时，name字段是没有索引的，如果没有索引，此时行锁会升级为表锁 (因为行锁是对索引项加的锁，而name没有索引)。
+
+   再针对name字段建立索引，索引建立之后，再次做一次测试会发现，客户端二并没有进入阻塞状态。这样就说明，根据索引字段进行更新操作，就可以避免行锁升级为表锁的情况。
+
+
+
+### 2.4.3、间隙锁&临键锁
+
+默认情况下，InnoDB在 REPEATABLE READ事务隔离级别运行，InnoDB使用 next-key 锁进行搜索和索引扫描，以防止幻读。
+
+- 索引上的等值查询 (唯一索引)，给不存在的记录加锁时, 优化为间隙锁。
+- 索引上的等值查询 (非唯一普通索引)，向右遍历时，最后一个值不满足查询需求时，next-keylock 退化为间隙锁。
+- 索引上的范围查询(唯一索引)--会访问到不满足条件的第一个值为止。
+
+> 注意：间隙锁唯一目的是防止其他事务插入间隙。间隙锁可以共存，一个事务采用的间隙锁不会阻止另一个事务在同一间隙上采用间隙锁。
+
+
+
+**示例**：
+
+1. 索引上的等值查询 (唯一索引)，给不存在的记录加锁时，优化为间隙锁
+
+   <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010221407947.png" alt="image-20221010221407947"  />
+   
+2. 索引上的等值查询(非唯一普通索引)，向右遍历时最后一个值不满足查询需求时，next-keylock 退化为间隙锁
+
+   我们知道InnoDB的B+树索引，叶子节点是有序的双向链表。假如，我们要根据这个二级索引查询值为18的数据，并加上共享锁，我们是只锁定18这一行就可以了吗？
+
+   并不是，因为是非唯一索引，这个结构中可能有多个18的存在，所以，在加锁时会继续往后找，找到一个不满足条件的值（当前案例中也就是29）。此时会对18加临键锁，并对29之前的间隙加锁。
+
+   ![image-20221010221811830](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010221811830.png)
+
+   ![image-20221010221846888](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010221846888.png)
+
