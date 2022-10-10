@@ -1401,3 +1401,31 @@ select object_schema, object_name, index_name, lock_type, lock_mode, lock_data f
 2. 意向排他锁和表读锁、写锁都互斥
 
    ![image-20221010112929338](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010112929338.png)
+
+
+
+## 2.4、行级锁
+
+
+
+### 2.4.1、介绍
+
+行级锁，每次操作锁住对应的行数据。锁定粒度最小，发生锁冲突的概率最低，并发度最高。应用在InnoDB存储引擎中。
+
+InnoDB的数据是基于索引组织的，行锁是通过对索引上的索引项加锁来实现的，而不是对记录加的锁。对于行级锁，主要分为以下三类：
+
+- 行锁（Record Lock）：锁定单个行记录的锁，防止其他事务对此行进行update和delete。在RC、RR隔离级别下都支持。
+
+  <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010153538091.png" alt="image-20221010153538091" style="zoom:80%;" />
+
+- 间隙锁（Gap Lock）：锁定索引记录间隙（不含该记录），确保索引记录间隙不变，防止其他事务在这个间隙进行insert，产生幻读。在RR隔离级别下都支持。
+
+  <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010153625543.png" alt="image-20221010153625543" style="zoom:80%;" />
+
+- 临键锁（Next-Key Lock）：行锁和间隙锁组合，同时锁住数据，并锁住数据前面的间隙Gap。在RR隔离级别下支持。
+
+  <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221010153651557.png" alt="image-20221010153651557" style="zoom:80%;" />
+
+
+
+### 2.4.2、行锁
