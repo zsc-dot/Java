@@ -12,3 +12,200 @@
 show variables like '%log_error%';
 ```
 
+
+
+## 1.2、二进制日志
+
+
+
+### 1.2.1、介绍
+
+二进制日志（BINLOG）记录了所有的 DDL（数据定义语言）语句和 DML（数据操纵语言）语句，但不包括数据查询（SELECT、SHOW）语句。
+
+作用：
+
+- 灾难时的数据恢复
+- MySQL的主从复制。在MySQL8版本中，默认二进制日志是开启着的
+
+涉及到的参数如下：
+
+```sql
+show variables like '%log_bin%';
+```
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221016213003106.png" alt="image-20221016213003106" style="zoom:80%;" />
+
+参数说明：
+
+- log_bin_basename：当前数据库服务器的binlog日志的基础名称(前缀)，具体的binlog文件名需要再该basename的基础上加上编号(编号从000001开始)
+- log_bin_index：binlog的索引文件，里面记录了当前服务器关联的binlog文件有哪些
+
+
+
+### 1.2.2、格式
+
+MySQL服务器中提供了多种格式来记录二进制日志，具体格式及特点如下：
+
+| 日志格式  | 含义                                                         |
+| --------- | ------------------------------------------------------------ |
+| statement | 基于SQL语句的日志记录，记录的是SQL语句，对数据进行修改的SQL都会记录在日志文件中。 |
+| row       | 基于行的日志记录，记录的是每一行的数据变更。（默认）         |
+| mixed     | 混合了statement和row两种格式，默认采用statement，在某些特殊情况下会自动切换为row进行记录。 |
+
+```sql
+show variables like '%binlog_format%';
+```
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221016213401142.png" alt="image-20221016213401142" style="zoom:80%;" />
+
+如果我们需要配置二进制日志的格式，只需要在 /etc/my.cnf 中配置 binlog_format 参数即可。
+
+
+
+### 1.2.3、查看
+
+由于日志是以二进制方式存储的，不能直接读取，需要通过二进制日志查询工具 mysqlbinlog 来查看，具体语法：
+
+```sh
+mysqlbinlog [参数选项] 日志文件名称
+参数选项：
+	-d 指定数据库名称，只列出指定的数据库相关操作
+	-o 忽略掉日志中的前n行命令
+	-v 将行事件(数据变更)重构为SQL语句
+	-vv 将行事件(数据变更)重构为SQL语句，并输出注释信息
+```
+
+
+
+### 1.2.4、删除
+
+对于比较繁忙的业务系统，每天生成的binlog数据巨大，如果长时间不清除，将会占用大量磁盘空间。可以通过以下几种方式清理日志：
+
+| 指令                                             | 含义                                                         |
+| ------------------------------------------------ | ------------------------------------------------------------ |
+| reset master                                     | 删除全部 binlog 日志，删除之后，日志编号将从 binlog.000001重新开始 |
+| purge master logs to 'binlog.*'                  | 删除 * 编号之前的所有日志                                    |
+| purge master logs before 'yyyy-mm-dd hh24:mi:ss' | 删除日志为 "yyyy-mm-dd hh24:mi:ss" 之前产生的所有日志        |
+
+
+
+也可以在mysql的配置文件中配置二进制日志的过期时间，设置之后二进制日志过期会自动删除：
+
+```sql
+show variables like '%binlog_expire_logs_seconds%';
+```
+
+
+
+## 1.3、查询日志
+
+查询日志中记录了客户端的所有操作语句，而二进制日志不包含查询数据的SQL语句。默认情况下，查询日志是未开启的。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221016215055096.png" alt="image-20221016215055096" style="zoom:80%;" />
+
+如果需要开启查询日志，可以修改MySQL的配置文件 /etc/my.cnf 文件，添加如下内容：
+
+```
+#该选项用来开启查询日志 ， 可选值 ： 0 或者 1 ； 0 代表关闭， 1 代表开启
+general_log=1
+#设置日志的文件名 ， 如果没有指定， 默认的文件名为 host_name.log
+general_log_file=mysql_query.log
+```
+
+
+
+开启了查询日志之后，在MySQL的数据存放目录，也就是 /var/lib/mysql/ 目录下就会出现mysql_query.log 文件。
+
+之后所有的客户端的增删改查操作都会记录在该日志文件之中，长时间运行后，该日志文件将会非常大。
+
+
+
+## 1.4、慢查询日志
+
+慢查询日志记录了所有执行时间超过参数 long_query_time 设置值并且扫描记录数不小于min_examined_row_limit 的所有的SQL语句的日志，默认未开启。
+
+long_query_time 默认为10 秒，最小为 0，精度可以到微秒。
+
+如果需要开启慢查询日志，需要在MySQL的配置文件 /etc/my.cnf 中配置如下参数：
+
+```
+#慢查询日志
+slow_query_log=1
+#执行时间参数
+long_query_time=2
+```
+
+
+
+默认情况下，不会记录管理语句，也不会记录不使用索引进行查找的查询。
+
+可以使用log_slow_admin_statements和 更改此行为 log_queries_not_using_indexes，如下所示：
+
+```
+#记录执行较慢的管理语句
+log_slow_admin_statements =1
+#记录执行较慢的未使用索引的语句
+log_queries_not_using_indexes = 1
+```
+
+
+
+> 上述所有的参数配置完成之后，都需要重新启动MySQL服务器才可以生效。
+
+
+
+## 1.5、总结
+
+1. 错误日志
+2. 二进制日志
+3. 查询日志
+4. 慢查询日志
+
+
+
+# 2、主从复制
+
+
+
+## 2.1、概述
+
+主从复制是指将主数据库的 DDL 和 DML 操作通过二进制日志传到从库服务器中，然后在从库上对这些日志重新执行（也叫重做），从而使得从库和主库的数据保持同步。
+
+MySQL支持一台主库同时向多台从库进行复制，从库同时也可以作为其他从服务器的主库，实现链状复制。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221016220814699.png" alt="image-20221016220814699" style="zoom:67%;" />
+
+MySQL 复制的优点主要包含以下三个方面：
+
+- 主库出现问题，可以快速切换到从库提供服务
+- 实现读写分离，降低主库的访问压力
+- 可以在从库中执行备份，以避免备份期间影响主库服务
+
+
+
+## 2.2、原理
+
+MySQL主从复制的核心就是 二进制日志，具体的过程如下：
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221016221227448.png" alt="image-20221016221227448" style="zoom: 80%;" />
+
+从上图来看，复制分成三步：
+
+- Master 主库在事务提交时，会把数据变更记录在二进制日志文件 Binlog 中
+- 从库读取主库的二进制日志文件 Binlog，写入到从库的中继日志 Relay Log 
+- slave重做中继日志中的事件，将改变反映它自己的数据
+
+
+
+## 2.3、搭建
+
+
+
+### 2.3.1、搭建准备
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221016221612603.png" alt="image-20221016221612603" style="zoom:80%;" />
+
+准备好两台服务器之后，在上述的两台服务器中分别安装好MySQL，并完成基础的初始化准备(安装、密码配置等操作)工作。 其中：
+
+- 192.168.200.200 作为主服务器master
+- 192.168.200.201 作为从服务器slave
