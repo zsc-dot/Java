@@ -105,7 +105,7 @@ show variables like '%binlog_expire_logs_seconds%';
 
 如果需要开启查询日志，可以修改MySQL的配置文件 /etc/my.cnf 文件，添加如下内容：
 
-```
+```sh
 #该选项用来开启查询日志 ， 可选值 ： 0 或者 1 ； 0 代表关闭， 1 代表开启
 general_log=1
 #设置日志的文件名 ， 如果没有指定， 默认的文件名为 host_name.log
@@ -128,7 +128,7 @@ long_query_time 默认为10 秒，最小为 0，精度可以到微秒。
 
 如果需要开启慢查询日志，需要在MySQL的配置文件 /etc/my.cnf 中配置如下参数：
 
-```
+```sh
 #慢查询日志
 slow_query_log=1
 #执行时间参数
@@ -141,7 +141,7 @@ long_query_time=2
 
 可以使用log_slow_admin_statements和 更改此行为 log_queries_not_using_indexes，如下所示：
 
-```
+```sh
 #记录执行较慢的管理语句
 log_slow_admin_statements =1
 #记录执行较慢的未使用索引的语句
@@ -209,6 +209,160 @@ MySQL主从复制的核心就是 二进制日志，具体的过程如下：
 
 - 192.168.200.200 作为主服务器master
 - 192.168.200.201 作为从服务器slave
+
+
+
+### 2.3.2、主库配置
+
+1. 修改配置文件 /etc/my.cnf
+
+   ```sh
+   #mysql 服务ID，保证整个集群环境中唯一，取值范围：1 – 232-1，默认为1
+   server-id=1
+   #是否只读,1 代表只读, 0 代表读写
+   read-only=0
+   #忽略的数据, 指不需要同步的数据库
+   #binlog-ignore-db=mysql
+   #指定同步的数据库
+   #binlog-do-db=db01
+   ```
+
+2. 重启MySQL服务器
+
+   ```sh
+   systemctl restart mysqld
+   ```
+
+3. 登录mysql，创建远程连接的账号，并授予主从复制权限
+
+   ```sql
+   -- 创建itcast用户，并设置密码，该用户可在任意主机连接该MySQL服务
+   CREATE USER 'itcast'@'%' IDENTIFIED WITH mysql_native_password BY 'Root@123456';
+   
+   -- 为 'itcast'@'%' 用户分配主从复制权限
+   GRANT REPLICATION SLAVE ON *.* TO 'itcast'@'%';
+   ```
+
+4. 通过指令，查看二进制日志坐标
+
+   ```sql
+   show master status;
+   ```
+
+   <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221017114943075.png" alt="image-20221017114943075"  />
+
+   字段含义说明：
+
+   - file：从哪个日志文件开始推送日志文件
+   - position：从哪个位置开始推送日志
+   - binlog_ignore_db：指定不需要同步的数据库
+
+
+
+### 2.3.3、从库配置
+
+1. 修改配置文件 /etc/my.cnf
+
+   对于从库，只需要查询即可，不需要写入数据
+
+   ```sh
+   #mysql 服务ID，保证整个集群环境中唯一，取值范围：1 – 2^32-1，和主库不一样即可
+   server-id=2
+   #是否只读,1 代表只读, 0 代表读写
+   read-only=1
+   # read-only设置为1后，只针对普通用户，超级管理员还是可以读写，需要设置super-read-only=1才能禁用
+   super-read-only=1
+   ```
+
+2. 重新启动MySQL服务
+
+   ```sh
+   systemctl restart mysqld
+   ```
+
+3.  登录mysql，设置主库配置
+
+   ```sql
+   CHANGE REPLICATION SOURCE TO SOURCE_HOST='192.168.200.200', SOURCE_USER='itcast', SOURCE_PASSWORD='Root@123456', SOURCE_LOG_FILE='binlog.000004', SOURCE_LOG_POS=663;
+   ```
+
+   上述是8.0.23中的语法。如果mysql是 8.0.23 之前的版本，执行如下SQL：
+
+   ```sql
+   CHANGE MASTER TO MASTER_HOST='192.168.200.200', MASTER_USER='itcast', MASTER_PASSWORD='Root@123456', MASTER_LOG_FILE='binlog.000004', MASTER_LOG_POS=663;
+   ```
+
+   | 参数名          | 含义               | 8.0.23之前      |
+   | --------------- | ------------------ | --------------- |
+   | SOURCE_HOST     | 主库IP地址         | MASTER_HOST     |
+   | SOURCE_USER     | 连接主库的用户名   | MASTER_USER     |
+   | SOURCE_PASSWORD | 连接主库的密码     | MASTER_PASSWORD |
+   | SOURCE_LOG_FILE | binlog日志文件名   | MASTER_LOG_FILE |
+   | SOURCE_LOG_POS  | binlog日志文件位置 | MASTER_LOG_POS  |
+
+4. 开启同步操作
+
+   ```sql
+   start replica; # 8.0.22之后
+   start slave; # 8.0.22之前
+   ```
+
+5. 查看主从同步状态
+
+   ```sql
+   show replica status; # 8.0.22之后
+   show slave status; # 8.0.22之前
+   ```
+
+   <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221017135710773.png" alt="image-20221017135710773"  />
+
+   这两个参数为yes，就说明主从状态是正常的。
+
+
+
+### 2.3.4、测试
+
+1. 在主库上创建数据库、表，并插入数据
+
+   ```sql
+   create database db01;
+   use db01;
+   create table tb_user(
+       id int(11) primary key not null auto_increment,
+       name varchar(50) not null,
+       sex varchar(1)
+   )engine=innodb default charset=utf8mb4;
+   insert into tb_user(id,name,sex) values(null,'Tom', '1'), (null,'Trigger','0'), (null,'Dawn','1');
+   ```
+
+2. 在从库中查询数据，验证主从是否同步
+
+
+
+如果要同步二进制日志主从复制位置之前的数据，从主库中导出sql文件，在从库中执行即可
+
+
+
+## 2.4、总结
+
+1. 概述
+
+   将主库的数据变更同步到从库，从而保证主库和从库数据一致
+
+   数据备份、失败迁移，读写分离，降低单库读写压力
+
+2. 原理
+
+   1. 主库会把数据变更记录在二进制日志文件binlog中
+   2. 从库连接主库，读取binlog日志，并写入自身中继日志relaylog
+   3. 从库重做中继日志，将改变反应为自己的数据
+
+3. 搭建
+
+   1. 准备服务器
+   2. 配置主库
+   3. 配置从库
+   4. 测试主从复制
 
 
 
