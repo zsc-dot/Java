@@ -518,7 +518,7 @@ String类型，也就是字符串类型，是Redis中最简单的存储类型。
 
 
 
-String的常见命令有：
+**String的常见命令**
 
 * SET：添加或者修改已经存在的一个String类型的键值对
 * GET：根据key获取String类型的value
@@ -552,7 +552,7 @@ OK
 
 
 
-### 3.3.2、mset& mget
+### 3.3.2、mset & mget
 
 ```sh
 127.0.0.1:6379> MSET k1 v1 k2 v2 k3 v3
@@ -670,4 +670,372 @@ Redis的key允许有多个单词形成层级结构，多个单词之间用 ':' �
 
 
 ## 3.5、Hash命令
+
+Hash类型，也叫散列，其value是一个无序字典，类似于Java中的HashMap结构。
+
+String结构是将对象序列化为JSON字符串后存储，当需要修改对象某个字段时很不方便：
+
+![1652941995945](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1652941995945.png)
+
+Hash结构可以将对象中的每个字段独立存储，可以针对单个字段做CRUD：
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1652942027719.png" alt="1652942027719"  />
+
+**Hash类型的常见命令**
+
+- HSET key field value：添加或者修改hash类型key的field的值
+- HGET key field：获取一个hash类型key的field的值
+- HMSET：批量添加多个hash类型key的field的值
+- HMGET：批量获取多个hash类型key的field的值
+- HGETALL：获取一个hash类型的key中的所有的field和value
+- HKEYS：获取一个hash类型的key中的所有的field
+- HVALS：获取一个hash类型的key中的所有的value
+- HINCRBY:让一个hash类型key的字段值自增并指定步长
+- HSETNX：添加一个hash类型的key的field值，前提是这个field不存在，否则不执行
+
+
+
+### 3.5.1、hset & hget
+
+```sh
+127.0.0.1:6379> HSET heima:user:3 name Lucy//大key是 heima:user:3 小key是name，小value是Lucy
+(integer) 1
+127.0.0.1:6379> HSET heima:user:3 age 21// 如果操作不存在的数据，则是新增
+(integer) 1
+127.0.0.1:6379> HSET heima:user:3 age 17 //如果操作存在的数据，则是修改
+(integer) 0
+127.0.0.1:6379> HGET heima:user:3 name 
+"Lucy"
+127.0.0.1:6379> HGET heima:user:3 age
+"17"
+```
+
+
+
+### 3.5.2、hmset & hmget
+
+```sh
+127.0.0.1:6379> HMSET heima:user:4 name LiLei age 20 sex man
+OK
+127.0.0.1:6379> HMGET heima:user:4 name age sex
+1) "LiLei"
+2) "20"
+3) "man"
+```
+
+
+
+### 3.5.3、hgetall
+
+```sh
+127.0.0.1:6379> HGETALL heima:user:4
+1) "name"
+2) "LiLei"
+3) "age"
+4) "20"
+5) "sex"
+6) "man"
+```
+
+
+
+### 3.5.4、hkeys & hvals
+
+```sh
+127.0.0.1:6379> HKEYS heima:user:4
+1) "name"
+2) "age"
+3) "sex"
+127.0.0.1:6379> HVALS heima:user:4
+1) "LiLei"
+2) "20"
+3) "man"
+```
+
+
+
+### 3.5.5、hincrby
+
+```sh
+127.0.0.1:6379> HINCRBY  heima:user:4 age 2
+(integer) 22
+127.0.0.1:6379> HVALS heima:user:4
+1) "LiLei"
+2) "22"
+3) "man"
+127.0.0.1:6379> HINCRBY  heima:user:4 age -2
+(integer) 20
+```
+
+
+
+### 3.5.6、hsetnx
+
+```sh
+127.0.0.1:6379> HSETNX heima:user4 sex woman
+(integer) 0
+127.0.0.1:6379> HGETALL heima:user:3
+1) "name"
+2) "Lucy"
+3) "age"
+4) "17"
+127.0.0.1:6379> HSETNX heima:user:3 sex woman
+(integer) 1	
+127.0.0.1:6379> HGETALL heima:user:3
+1) "name"
+2) "Lucy"
+3) "age"
+4) "17"
+5) "sex"
+6) "woman"
+```
+
+
+
+## 3.6、List命令
+
+Redis中的List类型与Java中的LinkedList类似，可以看做是一个双向链表结构。既可以支持正向检索和也可以支持反向检索。
+
+特征也与LinkedList类似：
+
+* 有序
+* 元素可以重复
+* 插入和删除快
+* 查询速度一般
+
+常用来存储一个有序数据，例如：朋友圈点赞列表，评论列表等。
+
+
+
+**List的常见命令**
+
+- LPUSH key element ... ：向列表左侧插入一个或多个元素
+- LPOP key：移除并返回列表左侧的第一个元素，没有则返回nil
+- RPUSH key element ... ：向列表右侧插入一个或多个元素
+- RPOP key：移除并返回列表右侧的第一个元素
+- LRANGE key star end：返回一段角标范围内的所有元素
+- BLPOP和BRPOP：与LPOP和RPOP类似，只不过在没有元素时等待指定时间，而不是直接返回nil
+
+![1652943604992](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1652943604992.png)
+
+
+
+### 3.6.1、lpush & rpush
+
+```sh
+127.0.0.1:6379> LPUSH users 1 2 3
+(integer) 3
+127.0.0.1:6379> RPUSH users 4 5 6
+(integer) 6
+```
+
+
+
+### 3.6.2、lpop & rpop
+
+```sh
+127.0.0.1:6379> LPOP users
+"3"
+127.0.0.1:6379> RPOP users
+"6"
+```
+
+
+
+### 3.6.3、lange
+
+```sh
+127.0.0.1:6379> LRANGE users 1 2
+1) "1"
+2) "4"
+```
+
+
+
+### 3.6.4、blpop & brpop
+
+```sh
+127.0.0.1:6379> blpop users2 100
+
+127.0.0.1:6379> lpush user2 jack # 执行这个命令后，才会停止阻塞
+```
+
+
+
+## 3.7、Set命令
+
+Redis的Set结构与Java中的HashSet类似，可以看做是一个value为null的HashMap。因为也是一个hash表，因此具备与HashSet类似的特征：
+
+* 无序
+* 元素不可重复
+* 查找快
+* 支持交集、并集、差集等功能
+
+**Set类型的常见命令**
+
+* SADD key member ... ：向set中添加一个或多个元素
+* SREM key member ... : 移除set中的指定元素
+* SCARD key： 返回set中元素的个数
+* SISMEMBER key member：判断一个元素是否存在于set中
+* SMEMBERS key：获取set中的所有元素
+* SINTER key1 key2 ... ：求key1与key2的交集
+* SDIFF key1 key2 ... ：求key1与key2的差集
+* SUNION key1 key2 ..：求key1和key2的并集
+
+
+
+```sh
+127.0.0.1:6379> sadd s1 a b c
+(integer) 3
+127.0.0.1:6379> smembers s1
+1) "c"
+2) "b"
+3) "a"
+127.0.0.1:6379> srem s1 a
+(integer) 1
+    
+127.0.0.1:6379> SISMEMBER s1 a
+(integer) 0
+    
+127.0.0.1:6379> SISMEMBER s1 b
+(integer) 1
+    
+127.0.0.1:6379> SCARD s1
+(integer) 2
+```
+
+
+
+**案例**
+
+* 将下列数据用Redis的Set集合来存储：
+* 张三的好友有：李四、王五、赵六
+* 李四的好友有：王五、麻子、二狗
+
+利用Set的命令实现下列功能：
+
+* 计算张三的好友有几人
+* 计算张三和李四有哪些共同好友
+* 查询哪些人是张三的好友却不是李四的好友
+* 查询张三和李四的好友总共有哪些人
+* 判断李四是否是张三的好友
+* 判断张三是否是李四的好友
+* 将李四从张三的好友列表中移除
+
+```sh
+127.0.0.1:6379> SADD zs lisi wangwu zhaoliu
+(integer) 3
+    
+127.0.0.1:6379> SADD ls wangwu mazi ergou
+(integer) 3
+    
+127.0.0.1:6379> SCARD zs
+(integer) 3
+    
+127.0.0.1:6379> SINTER zs ls
+1) "wangwu"
+    
+127.0.0.1:6379> SDIFF zs ls
+1) "zhaoliu"
+2) "lisi"
+    
+127.0.0.1:6379> SUNION zs ls
+1) "wangwu"
+2) "zhaoliu"
+3) "lisi"
+4) "mazi"
+5) "ergou"
+    
+127.0.0.1:6379> SISMEMBER zs lisi
+(integer) 1
+    
+127.0.0.1:6379> SISMEMBER ls zhangsan
+(integer) 0
+    
+127.0.0.1:6379> SREM zs lisi
+(integer) 1
+    
+127.0.0.1:6379> SMEMBERS zs
+1) "zhaoliu"
+2) "wangwu"
+```
+
+
+
+## 3.8、SortedSet命令
+
+Redis的SortedSet是一个可排序的set集合，与Java中的TreeSet有些类似，但底层数据结构却差别很大。SortedSet中的每一个元素都带有一个score属性，可以基于score属性对元素排序，底层的实现是一个跳表（SkipList）加 hash表。
+
+SortedSet具备下列特性：
+
+- 可排序
+- 元素不重复
+- 查询速度快
+
+因为SortedSet的可排序特性，经常被用来实现排行榜这样的功能。
+
+
+
+**SortedSet的常见命令**
+
+- ZADD key score member：添加一个或多个元素到sorted set ，如果已经存在则更新其score值
+- ZREM key member：删除sorted set中的一个指定元素
+- ZSCORE key member：获取sorted set中的指定元素的score值
+- ZRANK key member：获取sorted set 中的指定元素的排名
+- ZCARD key：获取sorted set中的元素个数
+- ZCOUNT key min max：统计score值在给定范围内的所有元素的个数
+- ZINCRBY key increment member：让sorted set中的指定元素自增，步长为指定的increment值
+- ZRANGE key min max：按照score排序后，获取指定排名范围内的元素
+- ZRANGEBYSCORE key min max：按照score排序后，获取指定score范围内的元素
+- ZDIFF、ZINTER、ZUNION：求差集、交集、并集
+
+注意：所有的排名默认都是升序，如果要降序则在命令的Z后面添加REV即可，例如：
+
+- **升序**获取sorted set 中的指定元素的排名：ZRANK key member
+- **降序**获取sorted set 中的指定元素的排名：ZREVRANK key memeber
+
+
+
+**案例**：
+
+将班级的下列学生得分存入Redis的SortedSet中：
+
+Jack 85，Lucy 89，Rose 82，Tom 95，Jerry 78，Amy 92，Miles 76
+
+并实现下列功能：
+
+- 删除Tom同学
+- 获取Amy同学的分数
+- 获取Rose同学的排名
+- 查询80分以下有几个学生
+- 给Amy同学加两分
+- 查出成绩前3名的同学
+- 查出成绩80分以下的所有同学
+
+```sh
+127.0.0.1:6379> zadd stus 85 Jack 89 Lucy 82 Rose 95 Tom 78 Jerry 92 Amy 76 Miles
+(integer) 7
+127.0.0.1:6379> zrem stus Tom
+(integer) 1
+127.0.0.1:6379> zscore stus Amy
+"92"
+127.0.0.1:6379> zrank stus Rose
+(integer) 2
+127.0.0.1:6379> zrevrank stus Rose
+(integer) 3
+127.0.0.1:6379> zcard stus
+(integer) 6
+127.0.0.1:6379> zcount stus 0 80
+(integer) 2
+127.0.0.1:6379> zincrby stus 2 Amy
+"94"
+127.0.0.1:6379> zrevrange stus 0 2
+1) "Amy"
+2) "Lucy"
+3) "Jack"
+127.0.0.1:6379> zrangebyscore stus 0 80
+1) "Miles"
+2) "Jerry"
+
+```
 
