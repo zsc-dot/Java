@@ -324,3 +324,292 @@ public class UserHolder {
 当注册完成后，用户去登录会去校验用户提交的手机号和验证码，是否一致，如果一致，则根据手机号查询用户信息，不存在则新建，最后将用户数据保存到redis，并且生成 token 作为 redis 的 key，当我们校验用户是否登录时，会去携带着 token 进行访问，从 redis 中取出 token 对应的 value，判断是否存在这个数据，如果没有则拦截，如果存在则将其保存到threadLocal中，并且放行。
 
 <img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653319474181.png" alt="1653319474181" style="zoom: 80%;" />
+
+
+
+## 1.8、基于Redis的短信登陆
+
+**UserServiceImpl代码**
+
+```java
+@Resource
+private StringRedisTemplate stringRedisTemplate;
+
+@Override
+public Result sendCode(String phone, HttpSession session) {
+    // 1. 校验手机号
+    if (RegexUtils.isPhoneInvalid(phone)) {
+        // 2. 如果不符合，返回错误信息
+        return Result.fail("手机号格式错误");
+    }
+    // 3. 符合，生成一个验证码
+    String code = RandomUtil.randomNumbers(6);
+    // 4. 保存验证码到 redis
+    stringRedisTemplate.opsForValue().set(RedisConstants.LOGIN_CODE_KEY + phone, code, RedisConstants.LOGIN_CODE_TTL, TimeUnit.MINUTES);
+    // 5. 发送验证码
+    log.debug("发送短信验证码成功，验证码：{}", code);
+    // 返回ok
+    return Result.ok();
+}
+
+@Override
+public Result login(LoginFormDTO loginForm, HttpSession session) {
+    // 1. 校验手机号和验证码
+    String phone = loginForm.getPhone();
+    if (RegexUtils.isPhoneInvalid(phone)) {
+        // 2. 如果不符合，返回错误信息
+        return Result.fail("手机号格式错误");
+    }
+    // 3. 从redis获取验证码并校验
+    String cacheCode = stringRedisTemplate.opsForValue().get(RedisConstants.LOGIN_CODE_KEY + phone);
+    String code = loginForm.getCode();
+    if (cacheCode == null || !cacheCode.equals(code)) {
+        // 4. 不一致，报错
+        return Result.fail("验证码错误");
+    }
+    // 5. 一致，根据手机号查询用户
+    User user = query().eq("phone", phone).one();
+    // 6. 判断用户是否存在
+    if (user == null) {
+        // 7. 不存在，创建新用户并保存
+        user = createUserWithPhone(phone);
+    }
+    // 8. 保存用户信息到 redis 中
+    // 8.1 随机生成token，作为登录令牌
+    String token = UUID.randomUUID().toString(true);
+    // 8.2 将User对象转为HashMap存储
+    UserDTO userDTO = BeanUtil.copyProperties(user, UserDTO.class);
+    Map<String, Object> userMap = 
+        BeanUtil.beanToMap(userDTO, new HashMap<>(),
+                           CopyOptions.create()
+                           .setIgnoreNullValue(true)
+                           // 将值转为字符串类型
+                           .setFieldValueEditor((fieldName, fieldValue) -> fieldValue.toString()));
+    // 8.3 存储
+    stringRedisTemplate.opsForHash().putAll(RedisConstants.LOGIN_USER_KEY + token, userMap);
+    // 8.4 设置token有效期
+    stringRedisTemplate.expire(RedisConstants.LOGIN_USER_KEY + token, RedisConstants.LOGIN_USER_TTL, TimeUnit.MINUTES);
+    // 8.5 返回token
+    return Result.ok(token);
+}
+```
+
+
+
+## 1.9、解决状态登录刷新问题
+
+
+
+### 1.9.1、初始方案思路总结
+
+在这个方案中，他确实可以使用对应路径的拦截，同时刷新登录token令牌的存活时间，但是现在这个拦截器他只是拦截需要被拦截的路径，假设当前用户访问了一些不需要拦截的路径，那么这个拦截器就不会生效，所以此时令牌刷新的动作实际上就不会执行。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653320822964.png" alt="1653320822964" style="zoom: 80%;" />
+
+
+
+### 1.9.2、优化方案
+
+既然之前的拦截器无法对不需要拦截的路径生效，那么我们可以添加一个拦截器，在第一个拦截器中拦截所有的路径，把第二个拦截器做的事情放入到第一个拦截器中，同时刷新令牌，因为第一个拦截器有了threadLocal的数据，所以此时第二个拦截器只需要判断拦截器中的user对象是否存在即可，完成整体刷新功能。
+
+![1653320764547](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653320764547.png)
+
+**RefreshTokenInterceptor**
+
+```java
+public class RefreshTokenInterceptor implements HandlerInterceptor {
+
+    private StringRedisTemplate stringRedisTemplate;
+
+    public RefreshTokenInterceptor(StringRedisTemplate stringRedisTemplate) {
+        this.stringRedisTemplate = stringRedisTemplate;
+    }
+
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        // 1. 获取请求头中的token
+        String token = request.getHeader("authorization");
+        if (StrUtil.isBlank(token)) {
+            return true;
+        }
+        // 2. 基于 token获取 redis中的用户
+        Map<Object, Object> userMap = stringRedisTemplate.opsForHash().entries(RedisConstants.LOGIN_USER_KEY + token);
+        // 3.判断用户是否存在
+        if (userMap.isEmpty()) {
+            return true;
+        }
+        // 5. 将查询到的hash数据转为User对象
+        UserDTO userDTO = BeanUtil.fillBeanWithMap(userMap, new UserDTO(), false);
+        // 6. 存在，保存用户信息到ThreadLocal
+        UserHolder.saveUser(userDTO);
+        // 7. 刷新token有效期
+        stringRedisTemplate.expire(RedisConstants.LOGIN_USER_KEY + token, RedisConstants.LOGIN_USER_TTL, TimeUnit.MINUTES);
+        // 8. 放行
+        return true;
+    }
+
+    @Override
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
+        // 移除用户
+        UserHolder.removeUser();
+    }
+}
+```
+
+
+
+**LoginInterceptor**
+
+```java
+public class LoginInterceptor implements HandlerInterceptor {
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        // 1. 判断是否需要拦截 (ThreadLocal中是否有用户)
+        if (UserHolder.getUser() == null) {
+            // 没有，需要拦截，设置状态码
+            response.setStatus(401);
+            // 拦截
+            return false;
+        }
+        // 有用户则放行
+        return true;
+    }
+}
+```
+
+
+
+**MvcConfig**
+
+```java
+@Configuration
+public class MvcConfig implements WebMvcConfigurer {
+
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        // 拦截器默认按add顺序执行
+        // 也可以通过order控制，order越大执行优先级越低
+        registry.addInterceptor(new RefreshTokenInterceptor(stringRedisTemplate)).order(0);
+        registry.addInterceptor(new LoginInterceptor())
+                .excludePathPatterns(
+                        "/user/code",
+                        "/user/login",
+                        "/blog/got",
+                        "/shop/**",
+                        "/shop-type/**",
+                        "/upload/**",
+                        "/voucher/**"
+                ).order(1);
+    }
+}
+```
+
+
+
+# 2、商户查询缓存
+
+
+
+## 2.1、什么是缓存
+
+实际开发中，系统需要 "避震器"，防止过高的数据访问猛冲系统，导致其操作线程无法及时处理信息而瘫痪；
+
+这在实际开发中对企业讲，对产品口碑，用户评价都是致命的；所以企业非常重视缓存技术；
+
+**缓存(**Cache)，就是数据交换的**缓冲区**，俗称的缓存就是**缓冲区内的数据**，一般从数据库中获取，存储于本地代码。
+
+```java
+Static final ConcurrentHashMap<K,V> map = new ConcurrentHashMap<>(); // 本地用于高并发
+
+static final Cache<K,V> USER_CACHE = CacheBuilder.newBuilder().build(); // 用于redis等缓存
+
+Static final Map<K,V> map =  new HashMap(); // 本地缓存
+```
+
+由于其被**Static**修饰，所以随着类的加载而被加载到**内存之中**，作为本地缓存，由于其又被**final**修饰，所以其引用和对象之间的关系是固定的，不能改变，因此不用担心赋值 (=) 导致缓存失效；
+
+
+
+### 2.1.1、为什么要使用缓存
+
+一句话:因为**速度快，好用**
+
+缓存数据存储于代码中，而代码运行在内存中，内存的读写性能远高于磁盘，缓存可以大大降低**用户访问并发量带来的**服务器读写压力。
+
+实际开发过程中，企业的数据量，少则几十万，多则几千万，这么大数据量，如果没有缓存来作为 "避震器"，系统是几乎撑不住的，所以企业会大量运用到缓存技术；
+
+但是缓存也会增加代码复杂度和运营的成本：
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220523214414123.png" alt="image-20220523214414123" style="zoom: 67%;" />
+
+
+
+### 2.1.2、如何使用缓存
+
+实际开发中，会构筑多级缓存来使系统运行速度进一步提升，例如：本地缓存与redis中的缓存并发使用
+
+**浏览器缓存**：主要是存在于浏览器端的缓存
+
+**应用层缓存：**可以分为tomcat本地缓存，比如之前提到的map，或者是使用redis作为缓存
+
+**数据库缓存：**在数据库中有一片空间是 buffer pool，增改查数据都会先加载到mysql的缓存中
+
+**CPU缓存：**当代计算机最大的问题是cpu性能提升了，但内存读写速度没有跟上，所以为了适应当下的情况，增加了cpu的L1，L2，L3级的缓存
+
+![image-20220523212915666](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20220523212915666.png)
+
+
+
+## 2.2、添加商户缓存
+
+在查询商户信息时，我们是直接操作从数据库中去进行查询的，大致逻辑是这样，直接查询数据库肯定慢，所以我们需要增加缓存
+
+```java
+@GetMapping("/{id}")
+public Result queryShopById(@PathVariable("id") Long id) {
+    //这里是直接查询数据库
+    return shopService.queryById(id);
+}
+```
+
+
+
+### 2.2.1、缓存模型和思路
+
+标准的操作方式就是查询数据库之前先查询缓存，如果缓存数据存在，则直接从缓存中返回，如果缓存数据不存在，再查询数据库，然后将数据存入redis。
+
+![1653322097736](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653322097736.png)
+
+
+
+### 2.2.2、代码实现
+
+代码思路：如果缓存有，则直接返回，如果缓存不存在，则查询数据库，然后存入redis。
+
+```java
+@Override
+public Result queryById(Long id) {
+    // 1. 从Redis查询商铺缓存
+    String shopJson = stringRedisTemplate.opsForValue().get(RedisConstants.CACHE_SHOP_KEY + id);
+    // 2. 判断是否存在
+    if (StrUtil.isNotBlank(shopJson)) {
+        // 3. 存在，直接返回
+        Shop shop = JSONUtil.toBean(shopJson, Shop.class);
+        return Result.ok(shop);
+    }
+    // 4. 不存在，根据id查询数据库
+    Shop shop = getById(id);
+    // 5. 不存在，返回错误
+    if (shop == null) {
+        return Result.fail("店铺不存在！");
+    }
+    // 6. 存在，写入Redis
+    stringRedisTemplate.opsForValue().set(RedisConstants.CACHE_SHOP_KEY + id, JSONUtil.toJsonStr(shop));
+    // 7. 返回
+    return Result.ok(shop);
+}
+```
+
