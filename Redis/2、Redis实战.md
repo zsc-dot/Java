@@ -613,3 +613,262 @@ public Result queryById(Long id) {
 }
 ```
 
+
+
+## 2.3、缓存更新策略
+
+缓存更新是redis为了节约内存而设计出来的一个东西，主要是因为内存数据宝贵，当我们向redis插入太多数据，此时就可能会导致缓存中的数据过多，所以redis会对部分数据进行更新，或者把他叫为淘汰更合适。
+
+**内存淘汰：**redis自动进行，当redis内存达到设定的max-memery的时候，会自动触发淘汰机制，淘汰掉一些不重要的数据 (可以自己设置策略方式)
+
+**超时剔除：**当我们给redis设置了过期时间ttl之后，redis会将超时的数据进行删除，方便继续使用缓存
+
+**主动更新：**可以手动调用方法把缓存删掉，通常用于解决缓存和数据库不一致问题
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221026134706665.png" alt="image-20221026134706665" style="zoom: 80%;" />
+
+
+
+业务场景：
+
+- 低一致性需求：使用内存淘汰机制。例如店铺类型的查询缓存
+- 高一致性需求：主动更新，并以超时剔除作为兜底方案。例如店铺详情查询的缓存
+
+
+
+### 2.3.1、数据库缓存不一致解决方案
+
+由于我们的**缓存的数据源来自于数据库**，而数据库的**数据是会发生变化的**，因此，如果当数据库中**数据发生变化，而缓存却没有同步**，此时就会有**一致性问题存在**，其后果是：
+
+用户使用缓存中的过时数据，就会产生类似多线程数据安全问题，从而影响业务，产品口碑等。
+
+有如下几种方案：
+
+- Cache Aside Pattern 人工编码方式：缓存调用者在更新完数据库后再去更新缓存，也称之为双写方案
+- Read/Write Through Pattern：由系统本身完成，数据库与缓存的问题交由系统本身去处理
+- Write Behind Caching Pattern：调用者只操作缓存，其他线程去异步处理数据库，实现最终一致
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653322857620.png" alt="1653322857620" style="zoom: 67%;" />
+
+
+
+### 2.3.2、数据库和缓存不一致采用什么方案
+
+综合考虑使用方案一，但是方案一调用者如何处理呢？
+
+操作缓存和数据库时有三个问题需要考虑：
+
+- 删除缓存还是更新缓存？
+  - 更新缓存：每次更新数据库都更新缓存，无效写操作较多
+  - 删除缓存：更新数据库时让缓存失效，查询时再更新缓存
+- 如何保证缓存与数据库的操作的同时成功或失败？
+  - 单体系统，将缓存与数据库操作放在一个事务
+  - 分布式系统，利用TCC等分布式事务方案
+
+- 先操作缓存还是先操作数据库？
+  - 先删除缓存，再操作数据库
+  - 先操作数据库，再删除缓存
+
+
+
+如果采用第一个方案，那么假设我们每次操作数据库后，都操作缓存，但是中间如果没有人查询，那么这个更新动作实际上只有最后一次生效，中间的更新动作意义并不大，我们可以把缓存删除，等待再次查询时，将缓存中的数据加载出来。
+
+我们应当是先操作数据库，再删除缓存。因为，如果选择第一种方案，在两个线程并发来访问时，假设线程1先来，他先把缓存删了，此时线程2过来，他查询缓存数据并不存在，此时他写入缓存，当他写入缓存后，线程1再执行更新动作时，实际上写入的就是旧的数据，新的数据被旧数据覆盖了。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653323595206.png" alt="1653323595206" style="zoom:80%;" />
+
+这两种方案都会出现问题，但是方案二的概率会更低一些，因为查询完数据库后就执行写入缓存的操作，两个操作之间的时间间隔很小。
+
+
+
+### 2.3.3、总结
+
+1. 低一致性需求：使用Redis自带的内存淘汰机制
+2. 高一致性需求：主动更新，并以超时剔除作为兜底方案
+   - 读操作：
+     - 缓存命中则直接返回
+     - 缓存未命中则查询数据库，并写入缓存，设定超时时间
+   - 写操作：
+     - 先写数据库，然后再删除缓存
+     - 要确保数据库与缓存操作的原子性
+
+
+
+## 2.4、实现商铺的双写一致
+
+修改ShopController中的业务逻辑，满足下面的需求：
+
+- 根据id查询店铺时，如果缓存未命中，则查询数据库，将数据库结果写入缓存，并设置超时时间；
+
+- 根据id修改店铺时，先修改数据库，再删除缓存
+
+
+
+### 2.4.1、修改queryById方法
+
+**设置redis缓存时添加过期时间**
+
+```java
+@Override
+public Result queryById(Long id) {
+    // 1. 从Redis查询商铺缓存
+    String shopJson = stringRedisTemplate.opsForValue().get(RedisConstants.CACHE_SHOP_KEY + id);
+    // 2. 判断是否存在
+    if (StrUtil.isNotBlank(shopJson)) {
+        // 3. 存在，直接返回
+        Shop shop = JSONUtil.toBean(shopJson, Shop.class);
+        return Result.ok(shop);
+    }
+    // 4. 不存在，根据id查询数据库
+    Shop shop = getById(id);
+    // 5. 不存在，返回错误
+    if (shop == null) {
+        return Result.fail("店铺不存在！");
+    }
+    // 6. 存在，写入Redis，并设置过期时间
+    stringRedisTemplate.opsForValue().set(RedisConstants.CACHE_SHOP_KEY + id, JSONUtil.toJsonStr(shop), RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
+    // 7. 返回
+    return Result.ok(shop);
+}
+```
+
+
+
+### 2.4.2、添加update方法
+
+代码分析：采用删除策略来解决双写问题，当我们修改了数据之后，然后把缓存中的数据进行删除，查询时发现缓存中没有数据，则会从mysql中加载最新的数据，从而避免数据库和缓存不一致的问题。
+
+```java
+@Override
+@Transactional
+public Result update(Shop shop) {
+    Long id = shop.getId();
+    if (id == null) {
+        return Result.fail("店铺id不能为空");
+    }
+    // 1. 更新数据库
+    updateById(shop);
+    // 2. 删除缓存
+    stringRedisTemplate.delete(RedisConstants.CACHE_SHOP_KEY + id);
+    return null;
+}
+```
+
+
+
+## 2.5、缓存穿透
+
+缓存穿透：缓存穿透是指客户端请求的数据在缓存中和数据库中都不存在，这样缓存永远不会生效，这些请求都会打到数据库。
+
+常见的解决方案有两种：
+
+* 缓存空对象
+  * 优点：实现简单，维护方便
+  * 缺点：
+    * 额外的内存消耗
+    * 可能造成短期的不一致
+* 布隆过滤
+  * 优点：内存占用较少，没有多余key
+  * 缺点：
+    * 实现复杂
+    * 存在误判可能
+
+
+
+**缓存空对象思路分析**：当我们客户端访问不存在的数据时，先请求redis，但是此时redis中没有数据，此时会访问到数据库，但是数据库中也没有数据，这个数据穿透了缓存，直击数据库，我们都知道数据库能够承载的并发不如redis这么高，如果大量的请求同时过来访问这种不存在的数据，这些请求就都会访问到数据库，简单的解决方案就是哪怕这个数据在数据库中也不存在，我们也把这个数据存入到redis中去，这样，下次用户过来访问这个不存在的数据，那么在redis中也能找到这个数据就不会进入到缓存了。
+
+
+
+**布隆过滤**：布隆过滤器其实采用的是哈希思想来解决这个问题，通过一个庞大的二进制数组，走哈希思想去判断当前这个要查询的这个数据是否存在，如果布滤器判断存在，则放行，这个请求会去访问redis，哪怕此时redis中的数据过期了，但是数据库中一定存在这个数据，在数据库中查询出来这个数据后，再将其放入到redis中，假设布隆过滤器判断这个数据不存在，则直接返回。这种方式优点在于节约内存空间，存在误判，误判原因在于：布隆过滤器走的是哈希思想，可能存在哈希冲突
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653326156516.png" alt="1653326156516" style="zoom:80%;" />
+
+
+
+## 2.6、解决商品查询的缓存穿透
+
+在原来的逻辑中，我们如果发现这个数据在mysql中不存在，直接就返回404了，这样是会存在缓存穿透问题的
+
+现在的逻辑中：如果这个数据不存在，我们不会返回404，还是会把这个数据写入到Redis中，并且将value设置为空，当再次发起查询时，我们如果发现命中之后，判断这个value是否是null，如果是null，则是之前写入的数据，证明是缓存穿透数据，如果不是，则直接返回数据。
+
+![1653327124561](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653327124561.png)
+
+
+
+```java
+@Override
+public Result queryById(Long id) {
+    // 1. 从Redis查询商铺缓存
+    String shopJson = stringRedisTemplate.opsForValue().get(RedisConstants.CACHE_SHOP_KEY + id);
+    // 2. 判断是否存在
+    if (StrUtil.isNotBlank(shopJson)) {
+        // 3. 存在，直接返回
+        Shop shop = JSONUtil.toBean(shopJson, Shop.class);
+        return Result.ok(shop);
+    }
+    // 判断命中的是否是空值
+    if (shopJson != null) {
+        // 返回一个错误信息
+        return Result.fail("店铺信息不存在！");
+    }
+    // 4. 不存在，根据id查询数据库
+    Shop shop = getById(id);
+    // 5. 不存在，返回错误
+    if (shop == null) {
+        // 将空值写入redis
+        stringRedisTemplate.opsForValue().set(RedisConstants.CACHE_SHOP_KEY + id, "", RedisConstants.CACHE_NULL_TTL, TimeUnit.MINUTES);
+        // 返回错误信息
+        return Result.fail("店铺不存在！");
+    }
+    // 6. 存在，写入Redis，并设置过期时间
+    stringRedisTemplate.opsForValue().set(RedisConstants.CACHE_SHOP_KEY + id, JSONUtil.toJsonStr(shop), RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
+    // 7. 返回
+    return Result.ok(shop);
+}
+```
+
+
+
+**小结**：
+
+缓存穿透产生的原因是什么？
+
+- 用户请求的数据在缓存中和数据库中都不存在，不断发起这样的请求，给数据库带来巨大压力
+
+缓存穿透的解决方案有哪些？
+
+* 缓存null值
+* 布隆过滤
+* 增强id的复杂度，避免被猜测id规律
+* 做好数据的基础格式校验
+* 加强用户权限校验
+* 做好热点参数的限流
+
+
+
+## 2.7、缓存雪崩
+
+缓存雪崩是指在同一时段大量的缓存key同时失效或者Redis服务宕机，导致大量请求到达数据库，带来巨大压力。
+
+解决方案：
+
+* 给不同的Key的TTL添加随机值
+* 利用Redis集群提高服务的可用性
+* 给缓存业务添加降级限流策略
+* 给业务添加多级缓存
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653327884526.png" alt="1653327884526" style="zoom:80%;" />
+
+
+
+## 2.8、缓存击穿
+
+缓存击穿问题也叫热点Key问题，就是一个被高并发访问并且缓存重建业务较复杂的key突然失效了，无数的请求访问会在瞬间给数据库带来巨大的冲击。
+
+常见的解决方案有两种：
+
+* 互斥锁
+* 逻辑过期
+
+逻辑分析：假设线程1在查询缓存之后，本来应该去查询数据库，然后把这个数据重新加载到缓存的，此时只要线程1走完这个逻辑，其他线程就都能从缓存中加载这些数据了，但是假设在线程1没有走完的时候，后续的线程2，线程3，线程4同时过来访问当前这个方法， 那么他们就会同一时刻来访问查询缓存，都没查到，接着同一时间去访问数据库，同时的去执行数据库代码，对数据库访问压力过大。
+
