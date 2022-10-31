@@ -2146,7 +2146,7 @@ Redisson是一个在Redis的基础上实现的Java驻内存数据网格（In-Mem
 
 Redission提供了分布式锁的多种多样的功能
 
-<img src="E:\Typora笔记\images\2、Redis实战\1653546736063.png" alt="1653546736063" style="zoom: 80%;" />
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653546736063.png" alt="1653546736063" style="zoom: 80%;" />
 
 
 
