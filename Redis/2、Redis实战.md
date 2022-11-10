@@ -2318,7 +2318,7 @@ redis.call('hincrby', KEYS[1], ARGV[2], 1)
 1. 先判断当前这把锁是否存在，如果不存在，插入一把锁，返回null
 2. 判断当前这把锁是否是属于当前线程，如果是，则返回null
 
-所以如果返回是null，则代表着当前线程已经抢锁完毕，或者可重入完毕，但是如果以上两个条件都不满足，则进入到第三个条件，返回的是锁的失效时间，同学们可以自行往下翻一点点，你能发现有个while( true) 再次进行tryAcquire进行抢锁
+所以如果返回是null，则代表着当前线程已经抢锁完毕，或者可重入完毕，但是如果以上两个条件都不满足，则进入到第三个条件，返回的是锁的失效时间，往下翻一点点，你能发现有个while( true) 再次进行tryAcquire进行抢锁
 
 ```java
 long threadId = Thread.currentThread().getId();
@@ -2408,3 +2408,4 @@ private void renewExpiration() {
 }
 ```
 
+![image-20221110160315345](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221110160315345.png)
