@@ -2132,11 +2132,11 @@ public void unlock() {
 
 基于setnx实现的分布式锁存在下面的问题：
 
-**重入问题**：重入问题是指 获得锁的线程可以再次进入到相同的锁的代码块中，可重入锁的意义在于防止死锁，比如HashTable这样的代码中，他的方法都是使用synchronized修饰的，假如他在一个加锁的方法内，调用另一个加锁的方法，那么此时如果是不可重入的，不就死锁了吗？所以可重入锁他的主要意义是防止死锁，我们的synchronized和Lock锁都是可重入的。
+**重入问题**：指 获得锁的线程可以再次进入到相同的锁的代码块中，可重入锁的意义在于防止死锁，比如HashTable这样的代码中，他的方法都是使用synchronized修饰的，假如他在一个加锁的方法内，调用另一个加锁的方法，那么此时如果是不可重入的，不就死锁了吗？所以可重入锁他的主要意义是防止死锁，我们的synchronized和Lock锁都是可重入的。
 
-**不可重试**：是指目前的分布式只能尝试一次，我们认为合理的情况是：当线程在获得锁失败后，他应该能再次尝试获得锁。
+**不可重试**：指目前的分布式只能尝试一次，合理的情况应该是：当线程在获得锁失败后，它应该能再次尝试获得锁。
 
-**超时释放**：我们在加锁时增加了过期时间，这样的我们可以防止死锁，但是如果卡顿的时间超长，虽然我们采用了lua表达式防止删锁的时候误删别人的锁，但是毕竟没有锁住，有安全隐患
+**超时释放**：我们在加锁时增加了过期时间，这样可以防止死锁，但是如果卡顿的时间超长，虽然采用了lua表达式防止删锁的时候误删别人的锁，但是毕竟没有锁住，有安全隐患
 
 **主从一致性：** 如果Redis提供了主从集群，当我们向集群写数据时，主机需要异步的将数据同步给从机，而万一在同步过去之前，主机宕机了，就会出现死锁问题。
 
@@ -2259,39 +2259,19 @@ GitHub地址： https://github.com/redisson/redisson
 
 ## 5.3、Redisson可重入锁原理
 
-在Lock锁中，他是借助于底层的一个voaltile的一个state变量来记录重入的状态的，比如当前没有人持有这把锁，那么state=0，假如有人持有这把锁，那么state=1，如果持有这把锁的人再次持有这把锁，那么state就会+1 ，如果是对于synchronized而言，他在c语言代码中会有一个count，原理和state类似，也是重入一次就加一，释放一次就-1，直到减少成0 时，表示当前这把锁没有被人持有。  
+可重入锁：获得锁的线程可以再次进入到相同的锁的代码块中，可重入锁的意义在于防止死锁
 
-在redission中，我们也支持可重入锁
+![1653548087334](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653548087334.png)
 
-在分布式锁中，它采用hash结构用来存储锁，其中大key表示这把锁是否存在，小key表示当前这把锁被哪个线程持有，所以接下来我们一起分析一下当前的这个lua表达式
+在Lock锁中，他是借助于底层的一个voaltile的一个state变量来记录重入的状态的。
 
-这个地方一共有3个参数
+如果当前没有人持有这把锁，那么state=0，之后有人持有这把锁，那么state=1，如果持有这把锁的人再次持有这把锁，那么state就会+1。
 
-- KEYS[1]：锁名称
-- ARGV[1]：锁失效时间
-- ARGV[2]：id + ":" + threadId；锁的小key
+如果是对于synchronized而言，他在c语言代码中会有一个count，原理和state类似，也是重入一次就加一，释放一次就减一，直到减少成0 时，表示当前这把锁没有被人持有。  
 
-exists：判断数据是否存在  name：是lock是否存在，如果==0，就表示当前这把锁不存在
+在redission中也支持可重入锁，在分布式锁中，它采用hash结构用来存储锁，其中大key表示这把锁是否存在，小key表示当前这把锁被哪个线程持有。
 
-redis.call('hset', KEYS[1], ARGV[2], 1); 此时他就开始往redis里边去写数据，写成一个hash结构
-
-Lock{
-
-​    id + **":"** + threadId :  1
-
-}
-
-如果当前这把锁存在，则第一个条件不满足，再判断
-
-redis.call('hexists', KEYS[1], ARGV[2]) == 1
-
-此时需要通过大key + 小key判断当前这把锁是否属于自己，如果是自己的，则进行
-
-redis.call('hincrby', KEYS[1], ARGV[2], 1)
-
-将当前这个锁的value进行+1，redis.call('pexpire', KEYS[1], ARGV[1]); 然后再对其设置过期时间，如果以上两个条件都不满足，则表示当前这把锁抢锁失败，最后返回pttl，即为当前这把锁的失效时间
-
-如果看了前边的源码， 你会发现他会去判断当前这个方法的返回值是否为null，如果是null，则对应则前两个if对应的条件，退出抢锁逻辑，如果返回的不是null，即走了第三个分支，在源码处会进行while(true)的自旋抢锁。
+获取锁的lua表达式：
 
 ```lua
 "if (redis.call('exists', KEYS[1]) == 0) then " +
@@ -2307,18 +2287,49 @@ redis.call('hincrby', KEYS[1], ARGV[2], 1)
               "return redis.call('pttl', KEYS[1]);"
 ```
 
-![1653548087334](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653548087334.png)
+这个地方一共有3个参数
+
+- KEYS[1]：锁名称
+- ARGV[1]：锁失效时间
+- ARGV[2]：id + ":" + threadId，锁的小key
+
+`exists`：判断lock是否存在，如果==0，就表示当前这把锁不存在；
+
+`redis.call('hset', KEYS[1], ARGV[2], 1)`：在redis中添加一条hash结构的数据；
+
+`redis.call('pexpire', KEYS[1], ARGV[1])`：设置过期时间。
+
+如果当前这把锁存在，则第一个条件不满足，再通过大key + 小key判断当前这把锁是否属于自己：`redis.call('hexists', KEYS[1], ARGV[2]) == 1`，如果是自己的，就执行：`redis.call('hincrby', KEYS[1], ARGV[2], 1)`，将当前这个锁的value进行加一。
+
+然后再重置有效期：`redis.call('pexpire', KEYS[1], ARGV[1])`，给其他线程留够执行时间。
+
+如果以上两个条件都不满足，则表示当前这把锁抢锁失败，最后返回pttl，即为当前这把锁的失效时间
+
+如果看了前边的源码， 会发现他会去判断当前这个方法的返回值是否为null：
+
+- 如果是null，则对应则前两个if对应的条件，退出抢锁逻辑
+- 如果不是null，即走了第三个分支，在源码处会进行while(true)的自旋抢锁。
 
 
 
-## 5.4、redission锁重试和WatchDog机制
+## 5.4、Redisson锁重试和WatchDog机制
+
+![image-20221115155317173](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221115155317173.png)
+
+当线程在获得锁失败后，应该能再次尝试获得锁。
+
+```java
+boolean tryLock(long time, long leaseTime, TimeUnit unit) throws InterruptedException;
+```
+
+- time：获取锁的最大等待时间，在此期间内，不断尝试获取锁，如果不赋值，第一次获取锁失败就会返回
+- leaseTime：锁失效时间，可以不赋值，有默认值
+- unit：时间单位
 
 抢锁过程中，获得当前线程，通过tryAcquire进行抢锁，该抢锁逻辑和之前逻辑相同
 
 1. 先判断当前这把锁是否存在，如果不存在，插入一把锁，返回null
 2. 判断当前这把锁是否是属于当前线程，如果是，则返回null
-
-所以如果返回是null，则代表着当前线程已经抢锁完毕，或者可重入完毕，但是如果以上两个条件都不满足，则进入到第三个条件，返回的是锁的失效时间，往下翻一点点，你能发现有个while( true) 再次进行tryAcquire进行抢锁
 
 ```java
 long threadId = Thread.currentThread().getId();
@@ -2329,7 +2340,15 @@ if (ttl == null) {
 }
 ```
 
-接下来会有一个条件分支，因为lock方法有重载方法，一个是带参数，一个是不带参数，如果带带参数传入的值是-1，如果传入参数，则leaseTime是他本身，所以如果传入了参数，此时leaseTime != -1 则会进去抢锁，抢锁的逻辑就是之前说的那三个逻辑
+所以如果返回是null，则代表着当前线程已经抢锁完毕，或者可重入完毕，但是如果以上两个条件都不满足，则进入到第三个条件，返回的是锁的失效时间。
+
+往下看源码，在经过一次订阅等待和两次超时判断后，有个while( true) 再次进行tryAcquire进行抢锁。
+
+
+
+我们在加锁时增加了过期时间，这样可以防止死锁，但是如果卡顿的时间超长，虽然采用了lua表达式防止删锁的时候误删别人的锁，但是毕竟没有锁住，有安全隐患。
+
+在抢锁的时候有一个条件分支，因为lock方法有重载方法，一个是带参数，一个是不带参数，如果不带参数传入的值是-1，如果传入参数，则leaseTime是他本身，所以如果传入了参数，此时leaseTime != -1 则会进去抢锁，抢锁的逻辑就是之前说的那三个逻辑
 
 ```java
 if (leaseTime != -1) {
@@ -2337,11 +2356,7 @@ if (leaseTime != -1) {
 }
 ```
 
-如果是没有传入时间，则此时也会进行抢锁， 而且抢锁时间是默认看门狗时间 
-
-commandExecutor.getConnectionManager().getCfg().getLockWatchdogTimeout()
-
-ttlRemainingFuture.onComplete((ttlRemaining, e) 这句话相当于对以上抢锁进行了监听，也就是说当上边抢锁完毕后，此方法会被调用，具体调用的逻辑就是去后台开启一个线程，进行续约逻辑，也就是看门狗线程
+如果是没有传入时间，也会进行抢锁， 而且抢锁时间是默认看门狗时间：`commandExecutor.getConnectionManager().getCfg().getLockWatchdogTimeout()`。
 
 ```java
 RFuture<Long> ttlRemainingFuture = tryLockInnerAsync(waitTime,
@@ -2360,15 +2375,7 @@ ttlRemainingFuture.onComplete((ttlRemaining, e) -> {
 return ttlRemainingFuture;
 ```
 
-此逻辑就是续约逻辑，注意看commandExecutor.getConnectionManager().newTimeout（） 此方法
-
-Method(  **new** TimerTask() {},参数2 ，参数3  )
-
-指的是：通过参数2，参数3 去描述什么时候去做参数1的事情，现在的情况是：10s之后去做参数一的事情
-
-因为锁的失效时间是30s，当10s之后，此时这个timeTask 就触发了，他就去进行续约，把当前这把锁续约成30s，如果操作成功，那么此时就会递归调用自己，再重新设置一个timeTask()，于是再过10s后又再设置一个timerTask，完成不停的续约
-
-那么大家可以想一想，假设我们的线程出现了宕机他还会续约吗？当然不会，因为没有人再去调用renewExpiration这个方法，所以等到时间之后自然就释放了。
+`ttlRemainingFuture.onComplete((ttlRemaining, e)`相当于对以上抢锁进行了监听，也就是说当上边抢锁完毕后，此方法会被调用，具体调用的逻辑就是去后台开启一个线程，进行续约逻辑，也就是看门狗线程。
 
 ```java
 private void renewExpiration() {
@@ -2408,4 +2415,118 @@ private void renewExpiration() {
 }
 ```
 
-![image-20221110160315345](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/image-20221110160315345.png)
+此逻辑就是续约逻辑，注意commandExecutor.getConnectionManager().newTimeout() 方法
+
+```java
+Timeout newTimeout(TimerTask task, long delay, TimeUnit unit)
+```
+
+通过delay，unit描述什么时候去做 task 的事情，现在的情况是：10s之后去做task的事情
+
+因为锁的失效时间是30s，当10s之后，此时这个timeTask 就触发了，他就去进行续约，把当前这把锁续约成30s，如果操作成功，那么此时就会递归调用自己，再重新设置一个timeTask()，于是再过10s后又再设置一个timerTask，完成不停的续约
+
+那么大家可以想一想，假设我们的线程出现了宕机他还会续约吗？当然不会，因为没有人再去调用renewExpiration这个方法，所以等到时间之后自然就释放了。
+
+
+
+## 5.5、Redisson锁的MultiLock原理
+
+为了提高redis的可用性，会搭建集群或者主从，现在以主从为例。
+
+将命令写在主机上， 主机会将数据同步给从机，但是假设在主机还没有来得及把数据写入到从机去的时候，此时主机宕机，哨兵会发现主机宕机，并且选举一个slave变成master，而此时新的master中实际上并没有锁信息，此时锁信息就已经丢掉了。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653553998403.png" alt="1653553998403"  />
+
+为了解决这个问题，redisson提出来了MutiLock锁，使用这把锁就不使用主从了，每个节点的地位都是一样的，这把锁加锁的逻辑需要写入到每一个主丛节点上，只有所有的服务器都写入成功，此时才是加锁成功，假设现在某个节点挂了，那么他去获得锁的时候，只要有一个节点拿不到，都不能算是加锁成功，就保证了加锁的可靠性。
+
+![1653554055048](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653554055048.png)
+
+MutiLock 加锁原理：
+
+当我们去设置了多个锁时，redisson会将多个锁添加到一个集合中，然后用while循环去不停去尝试拿锁，但是会有一个总共的加锁时间，这个时间是用需要加锁的个数 * 1500ms ，假设有3个锁，那么时间就是4500ms，假设在这4500ms内，所有的锁都加锁成功， 那么此时才算是加锁成功，如果在4500ms有线程加锁失败，则会再次去进行重试。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653553093967.png" alt="1653553093967"  />
+
+```java
+// 需要注入三个Redisson配置类
+@Resource
+private RedissonClient redissonClient1;
+@Resource
+private RedissonClient redissonClient2;
+@Resource
+private RedissonClient redissonClient3;
+
+@Test
+void setUp() {
+    RLock lock1 = redissonClient1.getLock("order");
+    RLock lock2 = redissonClient2.getLock("order");
+    RLock lock3 = redissonClient3.getLock("order");
+
+    // 创建联锁 multiLock
+    RLock lock = redissonClient1.getMultiLock(lock1, lock2, lock3);
+}
+```
+
+
+
+## 5.6、总结
+
+### 1、不可重入Redis分布式锁
+
+- 原理：利用setnx的互斥性；利用ex避免死锁；释放锁时判断线程标示
+- 缺陷：不可重入、无法重试、锁超时失效
+
+### 2、可重入的Redis分布式锁
+
+- 原理：利用hash结构，记录线程标示和重入次数；利用watchDog延续锁时间；利用信号量控制锁重试等待
+- 缺陷：redis宕机引起锁失效问题
+
+### 3、Redisson的MultiLock
+
+- 原理：多个独立的Redis节点，必须在所有节点都获取重入锁，才算获取锁成功
+- 缺陷：运维成本高、实现复杂
+
+
+
+# 6、秒杀优化
+
+
+
+## 6.1、异步秒杀思路
+
+我们来回顾一下下单流程：
+
+当用户发起请求，此时会请求nginx，nginx会访问到tomcat，而tomcat中的程序，会进行串行操作，分成如下几个步骤
+
+1. 查询优惠卷
+
+2. 判断秒杀库存是否足够
+
+3. 查询订单
+
+4. 校验是否是一人一单
+
+5. 扣减库存
+
+6. 创建订单
+
+在这六步操作中，又有很多操作是要去操作数据库的，而且还是一个线程串行执行， 这样就会导致我们的程序执行的很慢，所以我们需要异步程序执行。
+
+**思考**：我们可以不可以使用异步编排来做，或者说开启N多线程，一个线程执行查询优惠卷，一个执行判断扣减库存，一个去创建订单等等，然后再统一做返回，这种做法和课程中有哪种好呢？
+
+答案是课程中的好，因为上述方式，如果访问的人很多，那么线程池中的线程可能一下子就被消耗完了，而且使用上述方案，最大的特点在于，你觉得时效性会非常重要，但是你想想是吗？并不是，比如我只要确定他能做这件事，然后我后边慢慢做就可以了，我并不需要他一口气做完这件事，所以我们应当采用的是课程中，类似消息队列的方式来完成我们的需求，而不是使用线程池或者是异步编排的方式来完成这个需求。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653560986599.png" alt="1653560986599" style="zoom: 67%;" />
+
+优化方案：我们将耗时比较短的逻辑判断放入到redis中，比如是否库存足够，比如是否一人一单，这样的操作，只要这种逻辑可以完成，就意味着我们是一定可以下单完成的，我们只需要进行快速的逻辑判断，根本就不用等下单逻辑走完，我们直接给用户返回成功， 再在后台开一个线程，后台线程慢慢的去执行queue里边的消息，这样程序不就快了吗？而且也不用担心线程池消耗殆尽的问题，因为这里我们的程序中并没有手动使用任何线程池，当然这里边有两个难点：
+
+- 怎么在redis中去快速校验一人一单，还有库存判断
+- 由于我们校验和tomct下单是两个线程，那么我们如何知道到底哪个单他最后是否成功，或者是下单完成，为了完成这件事我们在redis操作完之后，我们会将一些信息返回给前端，同时也会把这些信息丢到异步queue中去，后续操作中，可以通过这个id来查询我们tomcat中的下单逻辑是否完成了。
+
+<img src="https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653561657295.png" alt="1653561657295" style="zoom: 80%;" />
+
+整体思路：当用户下单之后，判断库存是否充足只需要到redis中去根据key找对应的value是否大于0即可，如果不充足，则直接结束，如果充足，继续在redis中判断用户是否可以下单，如果set集合中没有这条数据，说明他可以下单，如果set集合中没有这条记录，则将userId和优惠券存入到redis中，并且返回0，整个过程需要保证是原子性的，我们可以使用lua来操作。
+
+当以上判断逻辑走完之后，我们可以判断当前redis中返回的结果是否是0 ，如果是0，则表示可以下单，则将之前说的信息存入到到queue中去，然后返回，然后再来个线程异步的下单，前端可以通过返回的订单id来判断是否下单成功。
+
+![1653562234886](https://raw.githubusercontent.com/zsc-dot/pic/master/img/Git/1653562234886.png)
